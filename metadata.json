@@ -1,0 +1,8 @@
+{
+  "name": " 12b",
+  "description": "Comprehensive administrative portal for tracking 7-period daily attendance, uniform compliance, additional student notes, and payment status for 34 students.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
