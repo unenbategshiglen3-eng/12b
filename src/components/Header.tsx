@@ -1,14 +1,18 @@
 import React from 'react';
 import { ClassroomConfig, UserAccount } from '../types';
-import { Shield, User, LogOut, ChevronDown, Edit3, Smartphone, Apple, Play } from 'lucide-react';
+import { Shield, User, LogOut, ChevronDown, Edit3, Smartphone, CheckCircle2 } from 'lucide-react';
 
-export type AppTab = 'attendance' | 'schedule' | 'homework' | 'uniform' | 'directory' | 'reports';
+export type AppTab = 'attendance' | 'history' | 'schedule' | 'homework' | 'uniform' | 'directory' | 'reports';
 
 interface HeaderProps {
   activeTab: AppTab;
   setActiveTab: (tab: AppTab) => void;
   config: ClassroomConfig;
   currentUser: UserAccount;
+  studentsCount?: number;
+  savedDaysCount?: number;
+  isAppInstalled?: boolean;
+  isAppInstallable?: boolean;
   onOpenAuthModal: () => void;
   onLogout: () => void;
   onQuickAction: () => void;
@@ -21,6 +25,10 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   config,
   currentUser,
+  studentsCount = 34,
+  savedDaysCount = 0,
+  isAppInstalled = false,
+  isAppInstallable = false,
   onOpenAuthModal,
   onLogout,
   onQuickAction,
@@ -47,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {config.className} · {config.schoolName}
                 </span>
                 <span className="text-[11px] text-blue-600 font-semibold block leading-tight">
-                  {config.adminName} (34 сурагч)
+                  {config.adminName} ({studentsCount} сурагч)
                 </span>
               </div>
             </button>
@@ -65,10 +73,10 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Zone 2: Navigation Links */}
           {isAdmin ? (
-            <nav className="hidden lg:flex items-center gap-4 xl:gap-6 text-xs font-semibold">
+            <nav className="hidden lg:flex items-center gap-4 xl:gap-5 text-xs font-semibold">
               <button
                 onClick={() => setActiveTab('attendance')}
-                className={`whitespace-nowrap py-1.5 transition-colors ${
+                className={`whitespace-nowrap shrink-0 py-1.5 transition-colors ${
                   activeTab === 'attendance'
                     ? 'text-blue-600 font-bold border-b-2 border-blue-600'
                     : 'text-slate-600 hover:text-blue-600'
@@ -77,19 +85,28 @@ export const Header: React.FC<HeaderProps> = ({
                 7 цагийн ирц
               </button>
               <button
+                onClick={() => setActiveTab('history')}
+                className={`whitespace-nowrap shrink-0 py-1.5 transition-colors ${
+                  activeTab === 'history'
+                    ? 'text-blue-600 font-bold border-b-2 border-blue-600'
+                    : 'text-slate-600 hover:text-blue-600'
+                }`}
+              >
+                Өдрийн түүх ({savedDaysCount})
+              </button>
+              <button
                 onClick={() => setActiveTab('schedule')}
-                className={`whitespace-nowrap py-1.5 transition-colors flex items-center gap-1 ${
+                className={`whitespace-nowrap shrink-0 py-1.5 transition-colors ${
                   activeTab === 'schedule'
                     ? 'text-blue-600 font-bold border-b-2 border-blue-600'
                     : 'text-slate-600 hover:text-blue-600'
                 }`}
               >
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                 5 өдрийн хуваарь
               </button>
               <button
                 onClick={() => setActiveTab('homework')}
-                className={`whitespace-nowrap py-1.5 transition-colors flex items-center gap-1 ${
+                className={`whitespace-nowrap shrink-0 py-1.5 transition-colors ${
                   activeTab === 'homework'
                     ? 'text-blue-600 font-bold border-b-2 border-blue-600'
                     : 'text-slate-600 hover:text-blue-600'
@@ -99,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab('uniform')}
-                className={`whitespace-nowrap py-1.5 transition-colors ${
+                className={`whitespace-nowrap shrink-0 py-1.5 transition-colors ${
                   activeTab === 'uniform'
                     ? 'text-blue-600 font-bold border-b-2 border-blue-600'
                     : 'text-slate-600 hover:text-blue-600'
@@ -109,17 +126,17 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
               <button
                 onClick={() => setActiveTab('directory')}
-                className={`whitespace-nowrap py-1.5 transition-colors ${
+                className={`whitespace-nowrap shrink-0 py-1.5 transition-colors ${
                   activeTab === 'directory'
                     ? 'text-blue-600 font-bold border-b-2 border-blue-600'
                     : 'text-slate-600 hover:text-blue-600'
                 }`}
               >
-                Сурагчид (34)
+                Сурагчид ({studentsCount})
               </button>
               <button
                 onClick={() => setActiveTab('reports')}
-                className={`whitespace-nowrap py-1.5 transition-colors ${
+                className={`whitespace-nowrap shrink-0 py-1.5 transition-colors ${
                   activeTab === 'reports'
                     ? 'text-blue-600 font-bold border-b-2 border-blue-600'
                     : 'text-slate-600 hover:text-blue-600'
@@ -138,14 +155,24 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Zone 3: Actions & User capsule */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Download app buttons for App Store & Google Play */}
+            {/* PWA Install / Download Button */}
             <button
               onClick={onOpenDownloadModal}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-700 transition-colors shadow-2xs"
-              title="App Store болон Google Play-ээс татах"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-xl text-xs font-bold transition-colors shadow-2xs ${
+                isAppInstalled
+                  ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
+                  : 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700'
+              }`}
+              title="Апп суулгах & Офлайн бэлэн байдал"
             >
-              <Smartphone className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden md:inline">Апп татах</span>
+              {isAppInstalled ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <Smartphone className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span className="hidden md:inline">
+                {isAppInstalled ? 'Апп суусан' : isAppInstallable ? 'Апп суулгах' : 'Апп татах'}
+              </span>
             </button>
 
             {/* User Account Capsule */}
@@ -201,6 +228,12 @@ export const Header: React.FC<HeaderProps> = ({
             7 цагийн ирц
           </button>
           <button
+            onClick={() => setActiveTab('history')}
+            className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-md ${activeTab === 'history' ? 'bg-blue-600 text-white font-bold' : ''}`}
+          >
+            Түүх ({savedDaysCount})
+          </button>
+          <button
             onClick={() => setActiveTab('schedule')}
             className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-md ${activeTab === 'schedule' ? 'bg-blue-600 text-white font-bold' : ''}`}
           >
@@ -222,7 +255,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => setActiveTab('directory')}
             className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-md ${activeTab === 'directory' ? 'bg-blue-600 text-white font-bold' : ''}`}
           >
-            Сурагчид (34)
+            Сурагчид ({studentsCount})
           </button>
           <button
             onClick={() => setActiveTab('reports')}

@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { Student, DailyClassLog, PeriodInfo, HomeworkItem, ClassroomConfig, WeekdayName } from '../types';
+import React, { useState, useMemo } from 'react';
+import { Student, DailyClassLog, HomeworkItem, ClassroomConfig, WeekdayName } from '../types';
 import { WEEKDAYS } from '../data/mockStudents';
-import { CheckCircle2, Shirt, BookOpen, Clock, Phone, Send, ShieldAlert, Calendar, Check, Download, Apple, Play } from 'lucide-react';
+import { getMongolianWeekday } from '../utils/dateUtils';
+import { CheckCircle2, Shirt, BookOpen, Clock, Phone, Send, ShieldAlert, Check, Download, History } from 'lucide-react';
 
 interface StudentPortalViewProps {
   student: Student;
   dailyLog: DailyClassLog;
+  dailyLogs?: Record<string, DailyClassLog>;
   config: ClassroomConfig;
   currentDate: string;
   homework: HomeworkItem[];
@@ -18,6 +20,7 @@ interface StudentPortalViewProps {
 export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   student,
   dailyLog,
+  dailyLogs = {},
   config,
   currentDate,
   homework,
@@ -26,7 +29,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   onToggleCompleteHomework,
   onOpenDownloadModal,
 }) => {
-  const [activeTab, setActiveTab] = useState<'attendance' | 'schedule' | 'homework' | 'phone'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'history' | 'schedule' | 'homework' | 'phone'>('attendance');
   const [requestText, setRequestText] = useState('');
   const [sentSuccess, setSentSuccess] = useState(false);
 
@@ -46,6 +49,32 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   for (let i = 1; i <= 7; i++) {
     if (pMap[i] === 'present' || pMap[i] === 'excused') presentCount++;
   }
+
+  const savedDates = useMemo(
+    () => Object.keys(dailyLogs).sort((a, b) => b.localeCompare(a)),
+    [dailyLogs]
+  );
+
+  const studentHistorySummary = useMemo(() => {
+    let totalPresent = 0;
+    let totalLate = 0;
+    let totalAbsent = 0;
+    let totalExcused = 0;
+    savedDates.forEach((d) => {
+      const rec = dailyLogs[d]?.records?.[student.id];
+      const periods = rec?.periods || { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' };
+      for (let p = 1; p <= 7; p++) {
+        const st = periods[p] || 'present';
+        if (st === 'present') totalPresent++;
+        else if (st === 'late') totalLate++;
+        else if (st === 'absent') totalAbsent++;
+        else if (st === 'excused') totalExcused++;
+      }
+    });
+    const totalPeriods = savedDates.length * 7;
+    const pct = totalPeriods > 0 ? Math.round(((totalPresent + totalExcused + totalLate * 0.8) / totalPeriods) * 100) : 100;
+    return { totalPresent, totalLate, totalAbsent, totalExcused, pct };
+  }, [savedDates, dailyLogs, student.id]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,7 +147,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               className="px-3.5 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-bold flex items-center gap-2 transition-all hover:scale-102"
             >
               <Download className="w-4 h-4" />
-              <span>Апп татах (App Store & Play)</span>
+              <span>Апп суулгах (PWA)</span>
             </button>
           </div>
         </div>
@@ -135,15 +164,24 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-blue-600/70 overflow-x-auto text-xs font-bold">
           <button
             onClick={() => setActiveTab('attendance')}
-            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap ${
+            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap shrink-0 ${
               activeTab === 'attendance' ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-100 hover:text-white'
             }`}
           >
             Өнөөдрийн 7 цагийн ирц
           </button>
           <button
+            onClick={() => setActiveTab('history')}
+            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+              activeTab === 'history' ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-100 hover:text-white'
+            }`}
+          >
+            <History className="w-3.5 h-3.5" />
+            Миний ирцийн түүх ({savedDates.length})
+          </button>
+          <button
             onClick={() => setActiveTab('schedule')}
-            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap ${
+            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap shrink-0 ${
               activeTab === 'schedule' ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-100 hover:text-white'
             }`}
           >
@@ -151,7 +189,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('homework')}
-            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
               activeTab === 'homework' ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-100 hover:text-white'
             }`}
           >
@@ -160,7 +198,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('phone')}
-            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
               activeTab === 'phone' ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-100 hover:text-white'
             }`}
           >
@@ -289,6 +327,104 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </form>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB 1B: MY DAILY ATTENDANCE HISTORY */}
+      {activeTab === 'history' && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                Өдөр бүрийн түүх
+              </div>
+              <h2 className="text-base font-extrabold text-slate-900">
+                Миний ирц ба дүрэмт хувцасны түүх ({savedDates.length} өдөр)
+              </h2>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 text-xs font-mono tabular-nums">
+              <span className="text-blue-700 font-bold">Нийт ирц: {studentHistorySummary.pct}%</span>
+              <span className="text-emerald-700 font-bold">{studentHistorySummary.totalPresent} И</span>
+              <span className="text-amber-700 font-bold">{studentHistorySummary.totalLate} Х</span>
+              <span className="text-rose-700 font-bold">{studentHistorySummary.totalAbsent} Т</span>
+              <span className="text-blue-600 font-bold">{studentHistorySummary.totalExcused} Ч</span>
+            </div>
+          </div>
+
+          {savedDates.length === 0 ? (
+            <div className="py-10 text-center text-xs text-slate-500">
+              Одоогоор хадгалагдсан өдрийн түүх алга байна.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
+              {savedDates.map((d) => {
+                const log = dailyLogs[d];
+                const rec = log?.records?.[student.id];
+                const dayPeriods = rec?.periods || { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' };
+                const dayUniform = rec?.uniform || { status: 'compliant' };
+
+                return (
+                  <div key={d} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/70">
+                    <div className="space-y-0.5 min-w-[170px]">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-sm text-slate-900 tabular-nums">{d}</span>
+                        <span className="text-xs text-slate-500">{getMongolianWeekday(d)}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Дүрэмт хувцас:{' '}
+                        <span
+                          className={`font-bold ${
+                            dayUniform.status === 'compliant'
+                              ? 'text-emerald-700'
+                              : dayUniform.status === 'exempt'
+                              ? 'text-blue-700'
+                              : 'text-rose-700'
+                          }`}
+                        >
+                          {dayUniform.status === 'compliant'
+                            ? 'Бүрэн'
+                            : dayUniform.status === 'partial'
+                            ? 'Дутуу'
+                            : dayUniform.status === 'non_compliant'
+                            ? 'Зөрчилтэй'
+                            : 'Чөлөөтэй'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[1, 2, 3, 4, 5, 6, 7].map((pNum) => {
+                        const st = dayPeriods[pNum] || 'present';
+                        const letter = st === 'present' ? 'И' : st === 'late' ? 'Х' : st === 'absent' ? 'Т' : 'Ч';
+                        const cls =
+                          st === 'present'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : st === 'late'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : st === 'absent'
+                            ? 'bg-rose-50 text-rose-800 border-rose-200'
+                            : 'bg-blue-50 text-blue-800 border-blue-200';
+                        return (
+                          <div
+                            key={pNum}
+                            className={`px-2 py-1 rounded-lg border text-[11px] font-mono font-bold flex items-center gap-1 ${cls}`}
+                          >
+                            <span className="text-[10px] opacity-70">{pNum}:</span>
+                            <span>{letter}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="text-xs text-slate-600 md:text-right max-w-[240px] truncate">
+                      {rec?.dailyRemark || dayUniform.violationReason || log?.dayNotes || '—'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

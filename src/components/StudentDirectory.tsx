@@ -4,6 +4,7 @@ import { Search, Plus, Phone } from 'lucide-react';
 
 interface StudentDirectoryProps {
   students: Student[];
+  className?: string;
   isAdmin: boolean;
   onSelectStudent: (student: Student) => void;
   onOpenAddStudent: () => void;
@@ -11,6 +12,7 @@ interface StudentDirectoryProps {
 
 export const StudentDirectory: React.FC<StudentDirectoryProps> = ({
   students,
+  className = '12Б анги',
   isAdmin,
   onSelectStudent,
   onOpenAddStudent,
@@ -54,7 +56,7 @@ export const StudentDirectory: React.FC<StudentDirectoryProps> = ({
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">{students.length} Сурагч бүртгэлтэй</span>
               <span aria-hidden="true">·</span>
-              <span>12Б анги</span>
+              <span>{className}</span>
             </div>
             <h2 className="text-lg font-bold text-slate-900 mt-1">
               Сурагчдын хувийн хэрэг, өөрийн дугаар & Холбоо барих мэдээлэл
@@ -80,7 +82,7 @@ export const StudentDirectory: React.FC<StudentDirectoryProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="34 сурагчаас нэр, ID, асран хамгаалагчаар хайх..."
+              placeholder={`${students.length} сурагчаас нэр, ID, асран хамгаалагчаар хайх...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -159,8 +161,6 @@ export const StudentDirectory: React.FC<StudentDirectoryProps> = ({
                         </button>
                         <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
                           <span>{stu.id}</span>
-                          <span aria-hidden="true">·</span>
-                          <span>{stu.gender}</span>
                           <span aria-hidden="true">·</span>
                           <span>Төрсөн: {stu.dateOfBirth}</span>
                         </div>

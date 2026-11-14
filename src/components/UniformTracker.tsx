@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Student, DailyClassLog, UniformStatus } from '../types';
+import { Student, DailyClassLog, UniformStatus, ClassroomConfig } from '../types';
 import { Check, X, Clock, ShieldCheck, AlertCircle, Search, Copy, CheckCheck, Shirt, Lock } from 'lucide-react';
 
 interface UniformTrackerProps {
   students: Student[];
   dailyLog: DailyClassLog;
   currentDate: string;
+  config?: ClassroomConfig;
   isAdmin: boolean;
   onUpdateUniform: (
     studentId: string,
@@ -21,6 +22,7 @@ export const UniformTracker: React.FC<UniformTrackerProps> = ({
   students,
   dailyLog,
   currentDate,
+  config,
   isAdmin,
   onUpdateUniform,
   onMarkAllCompliant,
@@ -44,7 +46,7 @@ export const UniformTracker: React.FC<UniformTrackerProps> = ({
   });
 
   const totalViolations = nonCompliantCount + partialCount;
-  const complianceRate = Math.round(((compliantCount + exemptCount) / students.length) * 100);
+  const complianceRate = students.length > 0 ? Math.round(((compliantCount + exemptCount) / students.length) * 100) : 100;
 
   const filteredStudents = students.filter((stu) => {
     const fullName = `${stu.lastName} ${stu.firstName}`.toLowerCase();
@@ -62,7 +64,10 @@ export const UniformTracker: React.FC<UniformTrackerProps> = ({
   });
 
   const generateParentNotice = (student: Student, reason?: string) => {
-    const text = `Сайн байна уу, ${student.guardianName} танаа:\nНийслэлийн 1-р сургуулийн 10А ангийн сурагч ${student.lastName} ${student.firstName} (№${student.rollNumber})-ийн өнөөдрийн (${currentDate}) өглөөний дүрэмт хувцасны үзлэгээр дараах зөрчил тэмдэглэгдлээ: "${reason || 'Дүрэмт хувцас дутуу/зөрчилтэй'}". Маргаашийн хичээлд дүрэмт хувцсыг бүрэн өмсүүлж ирүүлэхийг хүсье.\nХүндэтгэсэн: Ангийн багш, Администратор Ү. Эгшиглэн`;
+    const school = config?.schoolName || 'Нийслэлийн 13-р сургууль';
+    const className = config?.className || '12Б анги';
+    const teacher = config?.adminName || 'Ангийн багш';
+    const text = `Сайн байна уу, ${student.guardianName} танаа:\n${school}-ийн ${className}-ийн сурагч ${student.lastName} ${student.firstName} (№${student.rollNumber})-ийн (${currentDate}) өглөөний дүрэмт хувцасны үзлэгээр дараах зөрчил тэмдэглэгдлээ: "${reason || 'Дүрэмт хувцас дутуу/зөрчилтэй'}". Маргаашийн хичээлд дүрэмт хувцсыг бүрэн өмсүүлж ирүүлэхийг хүсье.\nХүндэтгэсэн: ${teacher}`;
     navigator.clipboard.writeText(text);
     setCopiedStudentId(student.id);
     setTimeout(() => setCopiedStudentId(null), 3000);
@@ -94,7 +99,7 @@ export const UniformTracker: React.FC<UniformTrackerProps> = ({
                 className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs"
               >
                 <CheckCheck className="w-4 h-4" />
-                Бүх 34 сурагчийг бүрэн гэж тэмдэглэх
+                Бүх {students.length} сурагчийг бүрэн гэж тэмдэглэх
               </button>
             ) : (
               <div className="flex items-center gap-1.5 text-xs text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 font-semibold">
@@ -161,7 +166,7 @@ export const UniformTracker: React.FC<UniformTrackerProps> = ({
                 : 'text-slate-600 hover:text-blue-600'
             }`}
           >
-            Бүгд (34)
+            Бүгд ({students.length})
           </button>
           <button
             onClick={() => setFilter('violations')}

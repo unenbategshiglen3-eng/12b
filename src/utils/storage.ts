@@ -1,5 +1,6 @@
 import { Student, DailyClassLog, ClassroomConfig, UserAccount, HomeworkItem } from '../types';
-import { generateInitialStudents, generateInitialDailyLog, DEFAULT_CONFIG, INITIAL_HOMEWORK } from '../data/mockStudents';
+import { generateInitialStudents, generateInitialDailyLogsHistory, DEFAULT_CONFIG, INITIAL_HOMEWORK } from '../data/mockStudents';
+import { getTodayDateString, getMongolianWeekday } from './dateUtils';
 
 const STORAGE_KEYS = {
   STUDENTS: 'classpulse_students_13_v6',
@@ -101,25 +102,18 @@ export function saveStoredStudents(students: Student[]): void {
 export function loadStoredDailyLogs(students: Student[]): Record<string, DailyClassLog> {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.DAILY_LOGS);
-    if (!raw) {
-      const today = '2026-11-09';
-      const initialLog = generateInitialDailyLog(today, students);
-      const logsMap: Record<string, DailyClassLog> = { [today]: initialLog };
-      localStorage.setItem(STORAGE_KEYS.DAILY_LOGS, JSON.stringify(logsMap));
-      return logsMap;
-    }
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') {
-      return parsed;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        return parsed;
+      }
     }
   } catch (err) {
     console.error('Error loading daily logs:', err);
   }
-  const today = '2026-11-09';
-  const initialLog = generateInitialDailyLog(today, students);
-  const logsMap: Record<string, DailyClassLog> = { [today]: initialLog };
-  localStorage.setItem(STORAGE_KEYS.DAILY_LOGS, JSON.stringify(logsMap));
-  return logsMap;
+  const initialHistory = generateInitialDailyLogsHistory(students);
+  localStorage.setItem(STORAGE_KEYS.DAILY_LOGS, JSON.stringify(initialHistory));
+  return initialHistory;
 }
 
 export function saveStoredDailyLogs(logs: Record<string, DailyClassLog>): void {
@@ -187,9 +181,7 @@ export function resetAllDataToDefault(): {
   homework: HomeworkItem[];
 } {
   const students = generateInitialStudents();
-  const today = '2026-11-09';
-  const initialLog = generateInitialDailyLog(today, students);
-  const logs: Record<string, DailyClassLog> = { [today]: initialLog };
+  const logs = generateInitialDailyLogsHistory(students);
   const config = DEFAULT_CONFIG;
   const accounts = [DEFAULT_ADMIN_ACCOUNT];
   const currentUser = DEFAULT_ADMIN_ACCOUNT;
@@ -215,7 +207,6 @@ export function exportDailyAttendanceCSV(
     '№',
     'Сурагчийн код',
     'Овог, Нэр',
-    'Хүйс',
     'Өөрийн утас',
     'Нөөц утас',
     '1-р цаг',
@@ -259,7 +250,6 @@ export function exportDailyAttendanceCSV(
       stu.rollNumber,
       `"${stu.id}"`,
       `"${stu.lastName} ${stu.firstName}"`,
-      stu.gender,
       `"${stu.fatherPhone || stu.guardianPhone}"`,
       `"${stu.motherPhone || stu.guardianPhone}"`,
       getStatusLetter(periods[1] || 'present'),
@@ -287,46 +277,80 @@ export function exportDailyAttendanceCSV(
   downloadFile(`Irts_Jurnal_${date}.csv`, '\uFEFF' + csvContent, 'text/csv;charset=utf-8;');
 }
 
-export function exportPaymentLedgerCSV(students: Student[], config: ClassroomConfig): void {
+export function exportAllHistoryCSV(
+  dailyLogs: Record<string, DailyClassLog>,
+  students: Student[],
+  config: ClassroomConfig
+): void {
+  const sortedDates = Object.keys(dailyLogs).sort((a, b) => b.localeCompare(a));
+
   const headers = [
-    '№',
-    'Сурагчийн код',
-    'Овог, Нэр',
-    'Асран хамгаалагч',
-    'Өөрийн утас',
-    'Нөөц утас',
-    'Нийт төлөх төлбөр (₮)',
-    'Төлсөн дүн (₮)',
-    'Үлдэгдэл дүн (₮)',
-    'Төлбөрийн төлөв',
-    'Төлөх эцсийн хугацаа',
-    'Сүүлд төлсөн огноо',
+    'Огноо',
+    'Гараг',
+    'Баталгаажсан эсэх',
+    'Нийт сурагч',
+    'Бүтэн өдөр ирсэн',
+    'Хоцролт/Хэсэгчлэн',
+    'Бүтэн өдөр тасалсан',
+    'Ирцийн хувь %',
+    'Дүрэмт хувцас бүрэн',
+    'Хувцасны зөрчил',
+    'Өдрийн тэмдэглэл',
   ];
 
-  const rows = students.map((stu) => [
-    stu.rollNumber,
-    `"${stu.id}"`,
-    `"${stu.lastName} ${stu.firstName}"`,
-    `"${stu.guardianName}"`,
-    `"${stu.fatherPhone || stu.guardianPhone}"`,
-    `"${stu.motherPhone || stu.guardianPhone}"`,
-    stu.payment.totalTuition,
-    stu.payment.amountPaid,
-    stu.payment.balanceDue,
-    stu.payment.status === 'paid' ? 'ТӨЛСӨН' : stu.payment.status === 'partial' ? 'ДУТУУ' : 'ТӨЛӨӨГҮЙ',
-    stu.payment.dueDate,
-    stu.payment.lastPaymentDate || 'Байхгүй',
-  ]);
+  const rows = sortedDates.map((date) => {
+    const log = dailyLogs[date];
+    let fullyPresent = 0;
+    let partialPresent = 0;
+    let absentWholeDay = 0;
+    let uniformCompliant = 0;
+    let uniformViolations = 0;
+
+    students.forEach((stu) => {
+      const rec = log?.records?.[stu.id];
+      const periods = rec?.periods || { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' };
+      let pCount = 0;
+      let aCount = 0;
+      for (let p = 1; p <= 7; p++) {
+        const st = periods[p] || 'present';
+        if (st === 'present' || st === 'excused') pCount++;
+        if (st === 'absent') aCount++;
+      }
+      if (aCount === 7) absentWholeDay++;
+      else if (pCount === 7) fullyPresent++;
+      else partialPresent++;
+
+      const uStatus = rec?.uniform?.status || 'compliant';
+      if (uStatus === 'compliant' || uStatus === 'exempt') uniformCompliant++;
+      else uniformViolations++;
+    });
+
+    const pct = students.length > 0 ? Math.round(((students.length - absentWholeDay) / students.length) * 100) : 100;
+
+    return [
+      date,
+      getMongolianWeekday(date),
+      log?.verifiedByAdmin ? 'Тийм' : 'Хадгалсан',
+      students.length,
+      fullyPresent,
+      partialPresent,
+      absentWholeDay,
+      `${pct}%`,
+      uniformCompliant,
+      uniformViolations,
+      `"${(log?.dayNotes || '').replace(/"/g, '""')}"`,
+    ];
+  });
 
   const csvContent = [
-    `# ${config.schoolName} - ${config.className} Сургалт ба дүрэмт хувцасны төлбөрийн тайлан`,
+    `# ${config.schoolName} - ${config.className} (${config.academicYear})`,
     `# Ангийн багш: ${config.adminName}`,
-    `# Огноо: ${new Date().toISOString().slice(0, 10)}`,
+    `# Өдөр бүрийн ирцийн түүхийн нэгтгэл (${sortedDates.length} өдөр) - Татсан огноо: ${getTodayDateString()}`,
     headers.join(','),
     ...rows.map((r) => r.join(',')),
   ].join('\n');
 
-  downloadFile(`Tolbor_Taillan_${new Date().toISOString().slice(0, 10)}.csv`, '\uFEFF' + csvContent, 'text/csv;charset=utf-8;');
+  downloadFile(`Irts_Tuuh_${getTodayDateString()}.csv`, '\uFEFF' + csvContent, 'text/csv;charset=utf-8;');
 }
 
 export function downloadFile(filename: string, content: string, mimeType: string): void {
@@ -340,3 +364,4 @@ export function downloadFile(filename: string, content: string, mimeType: string
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+

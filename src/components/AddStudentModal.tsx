@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Student } from '../types';
+import { getTodayDateString } from '../utils/dateUtils';
 import { X, UserPlus } from 'lucide-react';
 
 interface AddStudentModalProps {
@@ -18,10 +19,9 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [gender, setGender] = useState<'Эрэгтэй' | 'Эмэгтэй'>('Эрэгтэй');
   const [dateOfBirth, setDateOfBirth] = useState('2010-05-15');
   const [guardianName, setGuardianName] = useState('');
-  const [guardianRelation, setGuardianRelation] = useState<'Аав' | 'Ээж' | 'Асран хамгаалагч'>('Аав');
+  const [guardianRelation] = useState<'Аав' | 'Ээж' | 'Асран хамгаалагч'>('Аав');
   const [guardianPhone, setGuardianPhone] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -33,7 +33,6 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
       rollNumber: nextRoll,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      gender,
       dateOfBirth,
       email: `student${nextRoll}@school13.edu.mn`,
       phone: guardianPhone.trim(),
@@ -50,20 +49,10 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
       generalNotes: '12Б ангид шинээр шилжин ирсэн сурагч.',
       tags: ['Шинэ сурагч'],
       accountRegistered: false,
-      payment: {
-        status: 'paid',
-        totalTuition: 0,
-        amountPaid: 0,
-        balanceDue: 0,
-        dueDate: '',
-        term: '2026-2027 Намрын улирал',
-        fees: [],
-        transactions: [],
-      },
       notesLog: [
         {
           id: `note-${nextId}-1`,
-          date: new Date().toISOString().slice(0, 10),
+          date: getTodayDateString(),
           author: 'Администратор',
           category: 'Захиргаа',
           content: `12Б ангид албан ёсоор бүртгэв. Жагсаалтын дугаар: #${nextRoll}.`,
@@ -119,28 +108,15 @@ export const AddStudentModal: React.FC<AddStudentModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Хүйс</label>
-              <select
-                value={gender}
-                onChange={(e) => setGender(e.target.value as any)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-              >
-                <option value="Эрэгтэй">Эрэгтэй</option>
-                <option value="Эмэгтэй">Эмэгтэй</option>
-              </select>
-            </div>
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Төрсөн огноо</label>
-              <input
-                type="date"
-                required
-                value={dateOfBirth}
-                onChange={(e) => setDateOfBirth(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono"
-              />
-            </div>
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Төрсөн огноо</label>
+            <input
+              type="date"
+              required
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-mono"
+            />
           </div>
 
           <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl space-y-2">

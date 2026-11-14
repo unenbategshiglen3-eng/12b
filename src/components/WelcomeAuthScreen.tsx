@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { UserAccount, Student, ClassroomConfig } from '../types';
 import { ADMIN_ACCESS_CODE, ADMIN_BACKUP_CODE } from '../utils/storage';
-import { Shield, User, LogIn, UserPlus, Phone, Apple, Play, KeyRound, CheckCircle2, AlertCircle, Lock } from 'lucide-react';
+import { getTodayDateString } from '../utils/dateUtils';
+import { Shield, User, LogIn, UserPlus, Phone, Smartphone, KeyRound, CheckCircle2, AlertCircle, Lock } from 'lucide-react';
 
 interface WelcomeAuthScreenProps {
   config: ClassroomConfig;
@@ -77,7 +78,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       rollNumber: selectedRoll,
       displayName: `${selectedStudent.lastName} ${selectedStudent.firstName}`,
       parentPhone: parentPhone.trim(),
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: getTodayDateString(),
     };
 
     onRegisterStudent(newAccount, parentPhone.trim());
@@ -124,24 +125,25 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
       return;
     }
 
-    // Find or create admin account
-    let admin = accounts.find((a) => a.role === 'admin');
-    if (!admin) {
-      admin = {
-        id: 'usr-admin-main',
-        username: 'admin',
-        password: adminPassword || 'admin',
-        role: 'admin',
-        displayName: config.adminName || 'Ангийн багш (Администратор)',
-        createdAt: new Date().toISOString().slice(0, 10),
-      };
-    } else if (adminPassword && adminPassword.length >= 3) {
-      admin.password = adminPassword;
-    }
+    // Find or create admin account without mutating existing array item
+    const existingAdmin = accounts.find((a) => a.role === 'admin');
+    const adminAccount: UserAccount = existingAdmin
+      ? {
+          ...existingAdmin,
+          password: adminPassword && adminPassword.length >= 3 ? adminPassword : existingAdmin.password,
+        }
+      : {
+          id: 'usr-admin-main',
+          username: 'admin',
+          password: adminPassword || 'admin',
+          role: 'admin',
+          displayName: config.adminName || 'Ангийн багш (Администратор)',
+          createdAt: getTodayDateString(),
+        };
 
     setAdminSuccess('Тусгай код зөв байна! Администраторын эрхээр системд нэвтэрч байна...');
     setTimeout(() => {
-      onLogin(admin!);
+      onLogin(adminAccount);
     }, 600);
   };
 
@@ -163,22 +165,14 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
           </div>
         </div>
 
-        {/* App Store & Google Play Badges on Top */}
+        {/* App Install Badge on Top */}
         <div className="flex items-center gap-2">
           <button
             onClick={onOpenDownloadModal}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-semibold backdrop-blur-md transition-all hover:scale-102"
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-semibold backdrop-blur-md transition-all"
           >
-            <Play className="w-3.5 h-3.5 fill-current text-emerald-400" />
-            <span>Google Play</span>
-          </button>
-
-          <button
-            onClick={onOpenDownloadModal}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-semibold backdrop-blur-md transition-all hover:scale-102"
-          >
-            <Apple className="w-3.5 h-3.5 fill-current" />
-            <span>App Store</span>
+            <Smartphone className="w-3.5 h-3.5 text-blue-200" />
+            <span>Утас / Компьютерт апп суулгах</span>
           </button>
         </div>
       </div>
@@ -191,10 +185,10 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
             Эхлэх & Нэвтрэх хэсэг
           </div>
           <h2 className="text-xl font-extrabold tracking-tight">
-            12Б ангийн цахим бүртгэл
+            {config.className}-ийн цахим бүртгэл
           </h2>
           <p className="text-xs text-blue-100 mt-1">
-            34 сурагч өөрийн дугаараар бүртгүүлэн 5 өдрийн хуваарь, ирц, гэрийн даалгавраа хянана.
+            {students.length} сурагч өөрийн дугаараар бүртгүүлэн 5 өдрийн хуваарь, ирц, гэрийн даалгавраа хянана.
           </p>
 
           {/* Mode Switcher Tabs */}
@@ -256,7 +250,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
               {/* Student Picker */}
               <div>
                 <label className="block font-bold text-slate-800 mb-1">
-                  1. Та 34 сурагчийн хэн нь вэ?
+                  1. Та {students.length} сурагчийн хэн нь вэ?
                 </label>
                 <select
                   value={selectedRoll}
@@ -359,7 +353,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Хэрэглэгчийн нэр, Өөрийн утас эсвэл Сурагчийн дугаар (#1-34)
+                  Хэрэглэгчийн нэр, Өөрийн утас эсвэл Сурагчийн дугаар (#1-{students.length})
                 </label>
                 <input
                   type="text"

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { HomeworkItem, WeekdayName, Student } from '../types';
+import { HomeworkItem, WeekdayName } from '../types';
 import { WEEKDAYS } from '../data/mockStudents';
-import { BookOpen, Plus, Calendar, Clock, CheckCircle2, AlertCircle, Copy, Check, MessageSquare, Trash2 } from 'lucide-react';
+import { getTodayDateString } from '../utils/dateUtils';
+import { BookOpen, Plus, Clock, Check, MessageSquare, Trash2 } from 'lucide-react';
 
 interface HomeworkRemindersProps {
   homework: HomeworkItem[];
+  studentsCount?: number;
   isAdmin: boolean;
   currentStudentId?: string;
   onAddHomework: (item: Omit<HomeworkItem, 'id' | 'completedBy' | 'assignedDate'>) => void;
@@ -14,6 +16,7 @@ interface HomeworkRemindersProps {
 
 export const HomeworkReminders: React.FC<HomeworkRemindersProps> = ({
   homework,
+  studentsCount = 34,
   isAdmin,
   currentStudentId,
   onAddHomework,
@@ -30,7 +33,7 @@ export const HomeworkReminders: React.FC<HomeworkRemindersProps> = ({
   const [description, setDescription] = useState('');
   const [weekday, setWeekday] = useState<WeekdayName>('Даваа');
   const [periodNumber, setPeriodNumber] = useState(1);
-  const [dueDate, setDueDate] = useState('2026-11-10');
+  const [dueDate, setDueDate] = useState(() => getTodayDateString());
   const [dueTime, setDueTime] = useState('08:00');
   const [priority, setPriority] = useState<'Яаралтай' | 'Чухал' | 'Энгийн'>('Чухал');
   const [teacherName, setTeacherName] = useState('Д. Батбаяр');
@@ -230,8 +233,8 @@ export const HomeworkReminders: React.FC<HomeworkRemindersProps> = ({
                     )}
 
                     {isAdmin && (
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        {completedCount}/34 сурагч хийсэн
+                      <span className="text-[11px] text-slate-400 font-mono tabular-nums">
+                        {completedCount}/{studentsCount} сурагч хийсэн
                       </span>
                     )}
                   </div>

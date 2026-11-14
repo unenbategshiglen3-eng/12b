@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
-import { Student, NoteEntry, DailyClassLog } from '../types';
-import { X, HeartPulse, Plus, Trash2, CheckCircle2, ShieldAlert } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Student, NoteEntry, DailyClassLog, PeriodInfo } from '../types';
+import { getTodayDateString } from '../utils/dateUtils';
+import { X, Plus, Trash2, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 interface StudentDetailModalProps {
   student: Student | null;
   dailyLog: DailyClassLog;
+  periods?: PeriodInfo[];
+  adminName?: string;
   isAdmin: boolean;
   onClose: () => void;
   onUpdateStudent: (updatedStudent: Student) => void;
@@ -13,19 +16,25 @@ interface StudentDetailModalProps {
 export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   student,
   dailyLog,
+  periods,
+  adminName,
   isAdmin,
   onClose,
   onUpdateStudent,
 }) => {
-  if (!student) return null;
-
   const [activeTab, setActiveTab] = useState<'profile' | 'remarks' | 'attendance'>('profile');
 
-  const [formData, setFormData] = useState<Student>({ ...student });
+  const [formData, setFormData] = useState<Student | null>(student ? { ...student } : null);
   const [newTagInput, setNewTagInput] = useState('');
   const [newRemarkCategory, setNewRemarkCategory] = useState<NoteEntry['category']>('Сургалт');
   const [newRemarkText, setNewRemarkText] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    setFormData(student ? { ...student } : null);
+  }, [student]);
+
+  if (!student || !formData) return null;
 
   const todayRecord = dailyLog.records[student.id];
   const todayPeriods = todayRecord?.periods || { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' };
@@ -64,8 +73,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     if (!newRemarkText.trim()) return;
     const newEntry: NoteEntry = {
       id: `note-${student.id}-${Date.now()}`,
-      date: new Date().toISOString().slice(0, 10),
-      author: isAdmin ? 'Администратор (Ү. Эгшиглэн)' : `${student.lastName} ${student.firstName}`,
+      date: getTodayDateString(),
+      author: isAdmin ? (adminName || 'Администратор') : `${student.lastName} ${student.firstName}`,
       category: isAdmin ? newRemarkCategory : 'Чөлөө хүсэлт',
       content: newRemarkText.trim(),
     };
@@ -116,11 +125,13 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs text-blue-100 mt-1">
-                <span>{formData.gender}</span>
-                <span aria-hidden="true">·</span>
                 <span>Төрсөн: {formData.dateOfBirth}</span>
-                <span aria-hidden="true">·</span>
-                <span>Цусны бүлэг: {formData.bloodGroup}</span>
+                {formData.bloodGroup && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>Цусны бүлэг: {formData.bloodGroup}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -452,13 +463,23 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                   </p>
                 </div>
                 <div className="text-xs font-bold px-2.5 py-1 bg-white border border-blue-200 rounded-lg text-blue-800">
-                  Хувцас: {todayRecord?.uniform.status === 'compliant' ? 'БҮРЭН' : todayRecord?.uniform.status === 'partial' ? 'ДУТУУ' : 'ЗӨРЧИЛТЭЙ'}
+                  Хувцас:{' '}
+                  {todayRecord?.uniform.status === 'compliant'
+                    ? 'БҮРЭН'
+                    : todayRecord?.uniform.status === 'partial'
+                    ? 'ДУТУУ'
+                    : todayRecord?.uniform.status === 'exempt'
+                    ? 'ЧӨЛӨӨТЭЙ'
+                    : 'ЗӨРЧИЛТЭЙ'}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[1, 2, 3, 4, 5, 6, 7].map((pNum) => {
                   const status = todayPeriods[pNum] || 'present';
+                  const periodSubject =
+                    periods?.find((p) => p.periodNumber === pNum)?.subject ||
+                    ['Математик', 'Монгол хэл, Уран зохиол', 'Физик', 'Түүх, Нийгэм', 'Англи хэл', 'Мэдээлэл зүй', 'Биеийн тамир'][pNum - 1];
                   return (
                     <div
                       key={pNum}
@@ -467,7 +488,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                       <div>
                         <span className="font-bold text-blue-900 font-mono">{pNum}-р цаг</span>
                         <div className="text-[11px] text-slate-500">
-                          {['Математик', 'Уран зохиол', 'Физик', 'Түүх', 'Англи хэл', 'Мэдээлэл зүй', 'Биеийн тамир'][pNum - 1]}
+                          {periodSubject}
                         </div>
                       </div>
                       <span className={`px-2.5 py-1 rounded-md text-xs font-bold font-mono uppercase ${

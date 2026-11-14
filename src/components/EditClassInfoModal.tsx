@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ClassroomConfig } from '../types';
-import { X, CheckCircle2, School, Save } from 'lucide-react';
+import { X, School, Save } from 'lucide-react';
 
 interface EditClassInfoModalProps {
   isOpen: boolean;
@@ -15,14 +15,25 @@ export const EditClassInfoModal: React.FC<EditClassInfoModalProps> = ({
   config,
   onSaveConfig,
 }) => {
-  if (!isOpen) return null;
-
   const [schoolName, setSchoolName] = useState(config.schoolName);
   const [className, setClassName] = useState(config.className);
   const [adminName, setAdminName] = useState(config.adminName);
   const [roomNumber, setRoomNumber] = useState(config.roomNumber);
   const [academicYear, setAcademicYear] = useState(config.academicYear);
   const [grade, setGrade] = useState(config.grade);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSchoolName(config.schoolName);
+      setClassName(config.className);
+      setAdminName(config.adminName);
+      setRoomNumber(config.roomNumber);
+      setAcademicYear(config.academicYear);
+      setGrade(config.grade);
+    }
+  }, [isOpen, config]);
+
+  if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

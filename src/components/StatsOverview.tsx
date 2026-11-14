@@ -1,16 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Student, DailyClassLog, ClassroomConfig, UserAccount } from '../types';
-import { Calendar, ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, ShieldCheck, History, BookmarkCheck, CheckCircle2 } from 'lucide-react';
+import { getMongolianWeekday, getTodayDateString, shiftDateString } from '../utils/dateUtils';
 
 interface StatsOverviewProps {
   currentDate: string;
   setCurrentDate: (date: string) => void;
   students: Student[];
   dailyLog: DailyClassLog | undefined;
+  isDateSavedInHistory?: boolean;
+  savedDaysCount?: number;
   config: ClassroomConfig;
   currentUser: UserAccount;
   onNavigateTab: (tab: any) => void;
   onOpenEditClassInfo?: () => void;
+  onSaveDayToHistory?: (date: string) => void;
 }
 
 export const StatsOverview: React.FC<StatsOverviewProps> = ({
@@ -18,11 +22,15 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
   setCurrentDate,
   students,
   dailyLog,
+  isDateSavedInHistory = true,
+  savedDaysCount = 0,
   config,
   currentUser,
   onNavigateTab,
   onOpenEditClassInfo,
+  onSaveDayToHistory,
 }) => {
+  const [savedToast, setSavedToast] = useState(false);
   const totalStudents = students.length; // 34
   let fullyPresent = 0;
   let partialPresent = 0;
@@ -72,12 +80,18 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
   const uniformPercentage = totalStudents > 0 ? Math.round(((uniformCompliant + uniformExempt) / totalStudents) * 100) : 100;
 
   const shiftDate = (offsetDays: number) => {
-    const d = new Date(currentDate);
-    d.setDate(d.getDate() + offsetDays);
-    setCurrentDate(d.toISOString().slice(0, 10));
+    setCurrentDate(shiftDateString(currentDate, offsetDays));
   };
 
+  const weekdayName = getMongolianWeekday(currentDate);
   const isAdmin = currentUser.role === 'admin';
+
+  const handleSaveCurrentDay = () => {
+    if (!onSaveDayToHistory) return;
+    onSaveDayToHistory(currentDate);
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 2500);
+  };
 
   return (
     <div className="space-y-4 no-print">
@@ -123,6 +137,11 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
               onChange={(e) => e.target.value && setCurrentDate(e.target.value)}
               className="font-mono text-xs text-slate-800 bg-transparent border-0 focus:ring-0 p-0 cursor-pointer"
             />
+            {weekdayName && (
+              <span className="text-[11px] text-blue-700 font-semibold hidden sm:inline">
+                ({weekdayName})
+              </span>
+            )}
           </div>
           <button
             onClick={() => shiftDate(1)}
@@ -132,7 +151,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
             <ChevronRight className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setCurrentDate(new Date().toISOString().slice(0, 10))}
+            onClick={() => setCurrentDate(getTodayDateString())}
             className="ml-1 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 rounded-lg transition-colors whitespace-nowrap"
           >
             Өнөөдөр
@@ -140,21 +159,58 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
         </div>
       </div>
 
-      {/* Administrator Edit Privilege Alert in Blue */}
-      <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs">
+      {/* History Save & Administrator Privilege Bar */}
+      <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 text-blue-900">
           <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
           <span>
             {isAdmin ? (
-              <span>Та <strong className="font-bold underline text-blue-700">Администратор ({config.adminName || 'Ангийн багш'})</strong>-р нэвтэрсэн тул 7 цагийн ирц, дүрэмт хувцасны бүртгэлийг өөрчлөх БҮРЭН ЭРХТЭЙ байна.</span>
+              <span>
+                <strong className="font-bold text-blue-800">{currentDate} ({weekdayName})</strong>:{' '}
+                {savedToast ? (
+                  <span className="text-emerald-700 font-bold">Түүхэнд амжилттай хадгалагдлаа!</span>
+                ) : isDateSavedInHistory ? (
+                  <span>Энэ өдрийн бүртгэл түүхэнд хадгалагдсан байна{dailyLog?.savedAt ? ` (${dailyLog.savedAt})` : ''}.</span>
+                ) : (
+                  <span className="text-amber-800 font-semibold">Шинэ өдөр — ирц, хувцас тэмдэглэхэд түүхэнд автоматаар хадгалагдана.</span>
+                )}
+              </span>
             ) : (
-              <span>Та сурагчийн эрхээр нэвтэрсэн байна (Зөвхөн харах эрхтэй). Өөрчлөлтийг зөвхөн Ангийн багш хийнэ.</span>
+              <span>Та сурагчийн эрхээр нэвтэрсэн байна (Зөвхөн харах эрхтэй).</span>
             )}
           </span>
         </div>
-        <span className="px-2.5 py-1 rounded-md bg-blue-600 text-white font-bold text-[10px] shrink-0">
-          {isAdmin ? 'ЗӨВХӨН АДМИН ЗАСНА' : 'ХАРАХ ГОРИМ'}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {isAdmin && onSaveDayToHistory && (
+            <button
+              onClick={handleSaveCurrentDay}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+                isDateSavedInHistory
+                  ? 'bg-white text-emerald-700 border border-emerald-300 hover:bg-emerald-50'
+                  : 'bg-blue-600 text-white hover:bg-blue-700 shadow-xs'
+              }`}
+            >
+              {isDateSavedInHistory ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Түүх шинэчлэх
+                </>
+              ) : (
+                <>
+                  <BookmarkCheck className="w-3.5 h-3.5" />
+                  Түүхэнд хадгалах
+                </>
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => onNavigateTab('history')}
+            className="px-3 py-1.5 rounded-lg bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold text-xs transition-colors flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <History className="w-3.5 h-3.5" />
+            Өдрийн түүх ({savedDaysCount})
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards Grid */}
@@ -180,7 +236,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           <div className="mt-3 text-xs text-slate-500 flex items-center gap-1.5">
             <span className="font-mono tabular-nums text-slate-700">{fullyPresent} бүрэн</span>
             <span aria-hidden="true">·</span>
-            <span className="font-mono tabular-nums text-amber-700">{partialPresent} хоцорсон</span>
+            <span className="font-mono tabular-nums text-amber-700">{partialPresent} хэсэгчлэн</span>
             <span aria-hidden="true">·</span>
             <span className="font-mono tabular-nums text-rose-700">{absentWholeDay} тасалсан</span>
           </div>

@@ -64,7 +64,6 @@ export interface Student {
   rollNumber: number; // 1 to 34
   firstName: string;
   lastName: string;
-  gender: 'Эрэгтэй' | 'Эмэгтэй';
   dateOfBirth: string;
   email: string;
   phone: string;
@@ -80,7 +79,7 @@ export interface Student {
   medicalAlerts: string;
   generalNotes: string;
   tags: string[]; // Allowed tags only; Banned: Class Monitor, Mathematics, Bus 1, Robotics, Honor Student
-  payment: StudentPaymentInfo;
+  payment?: StudentPaymentInfo;
   notesLog: NoteEntry[];
   accountRegistered?: boolean;
 }
@@ -128,6 +127,8 @@ export interface DailyClassLog {
   dayNotes?: string;
   verifiedByAdmin?: boolean;
   verifiedAt?: string;
+  savedAt?: string;
+  updatedAt?: string;
 }
 
 export interface ClassroomConfig {

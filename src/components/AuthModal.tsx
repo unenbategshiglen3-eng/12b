@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserAccount, Student } from '../types';
 import { ADMIN_ACCESS_CODE, ADMIN_BACKUP_CODE } from '../utils/storage';
+import { getTodayDateString } from '../utils/dateUtils';
 import { X, LogIn, UserPlus, Shield, User, Lock, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface AuthModalProps {
@@ -20,8 +21,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLogin,
   onRegisterStudent,
 }) => {
-  if (!isOpen) return null;
-
   const [mode, setMode] = useState<'login' | 'register'>('login');
 
   // Login form state
@@ -36,6 +35,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   const [registerError, setRegisterError] = useState('');
   const [registerSuccess, setRegisterSuccess] = useState('');
+
+  if (!isOpen) return null;
 
   // Handle Login
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -134,7 +135,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       studentId: student.id,
       rollNumber: student.rollNumber,
       displayName: `${student.lastName} ${student.firstName}`,
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: getTodayDateString(),
     };
 
     onRegisterStudent(newAccount);
@@ -158,16 +159,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
 
           <div className="flex items-center gap-2 mb-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-200"></span>
             <span className="text-xs font-semibold uppercase tracking-wider text-blue-100">
               Нэвтрэх & Бүртгэлийн систем
             </span>
           </div>
           <h2 className="text-xl font-bold tracking-tight">
-            10-р ангийн удирдлагын портал
+            12Б ангийн удирдлагын портал
           </h2>
           <p className="text-xs text-blue-100 mt-1">
-            34 сурагч өөрсдийн бүртгэлээр нэвтэрч мэдээллээ харах ба администратор бүх эрхийг удирдана.
+            {students.length} сурагч өөрсдийн бүртгэлээр нэвтэрч мэдээллээ харах ба администратор бүх эрхийг удирдана.
           </p>
 
           {/* Mode Switcher Tabs */}

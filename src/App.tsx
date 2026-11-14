@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Student,
   DailyClassLog,
   ClassroomConfig,
-  AttendanceStatus,
-  UniformStatus,
-  PaymentTransaction,
   UserAccount,
   NoteEntry,
   HomeworkItem,
   WeekdayName,
   PeriodInfo,
+  AttendanceStatus,
+  UniformStatus,
 } from './types';
 import {
   loadStoredStudents,
@@ -26,11 +25,12 @@ import {
   loadStoredHomework,
   saveStoredHomework,
   resetAllDataToDefault,
-  DEFAULT_ADMIN_ACCOUNT,
 } from './utils/storage';
+import { getTodayDateString, getCurrentTimeString } from './utils/dateUtils';
 import { Header, AppTab } from './components/Header';
 import { StatsOverview } from './components/StatsOverview';
 import { AttendanceMatrix } from './components/AttendanceMatrix';
+import { DailyHistoryView } from './components/DailyHistoryView';
 import { WeeklyScheduleView } from './components/WeeklyScheduleView';
 import { HomeworkReminders } from './components/HomeworkReminders';
 import { UniformTracker } from './components/UniformTracker';
@@ -43,7 +43,9 @@ import { WelcomeAuthScreen } from './components/WelcomeAuthScreen';
 import { DownloadAppModal } from './components/DownloadAppModal';
 import { EditClassInfoModal } from './components/EditClassInfoModal';
 import { StudentPortalView } from './components/StudentPortalView';
-import { generateInitialDailyLog } from './data/mockStudents';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { usePWAInstall } from './hooks/usePWAInstall';
+import { generateCleanDailyLog } from './data/mockStudents';
 
 export default function App() {
   const [students, setStudents] = useState<Student[]>(() => loadStoredStudents());
@@ -54,15 +56,18 @@ export default function App() {
   const [accounts, setAccounts] = useState<UserAccount[]>(() => loadStoredAccounts());
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => loadStoredCurrentUser());
   const [homework, setHomework] = useState<HomeworkItem[]>(() => loadStoredHomework());
-  const [currentDate, setCurrentDate] = useState<string>('2026-11-09');
+  const [currentDate, setCurrentDate] = useState<string>(() => getTodayDateString());
   const [activeTab, setActiveTab] = useState<AppTab>('attendance');
 
   // Modals state
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [detailModalDate, setDetailModalDate] = useState<string | null>(null);
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [isEditClassInfoOpen, setIsEditClassInfoOpen] = useState(false);
+
+  const pwaInstall = usePWAInstall();
 
   // Sync state to localStorage
   useEffect(() => {
@@ -91,18 +96,17 @@ export default function App() {
 
   const isAdmin = currentUser?.role === 'admin';
 
-  // Ensure current date has a log entry
-  const getOrCreateDailyLog = (date: string): DailyClassLog => {
-    if (dailyLogs[date]) {
-      return dailyLogs[date];
-    }
-    const newLog = generateInitialDailyLog(date, students);
-    const updatedLogs = { ...dailyLogs, [date]: newLog };
-    setDailyLogs(updatedLogs);
-    return newLog;
+  // Purely derive the active day's log without mutating state during render
+  const buildDailyLogSnapshot = (date: string, sourceLogs: Record<string, DailyClassLog>): DailyClassLog => {
+    return sourceLogs[date] || generateCleanDailyLog(date, students);
   };
 
-  const currentDailyLog = getOrCreateDailyLog(currentDate);
+  const currentDailyLog = useMemo(
+    () => dailyLogs[currentDate] || generateCleanDailyLog(currentDate, students),
+    [dailyLogs, currentDate, students]
+  );
+
+  const savedDaysCount = Object.keys(dailyLogs).length;
 
   // Authentication handlers
   const handleLogin = (account: UserAccount) => {
@@ -205,6 +209,53 @@ export default function App() {
     setHomework((prev) => prev.filter((h) => h.id !== homeworkId));
   };
 
+  // History Management Handlers
+  const handleSaveDayToHistory = (date: string, dayNotes?: string) => {
+    if (!isAdmin) return;
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
+    const timeOnly = getCurrentTimeString();
+    setDailyLogs((prev) => {
+      const existing = buildDailyLogSnapshot(date, prev);
+      return {
+        ...prev,
+        [date]: {
+          ...existing,
+          dayNotes: dayNotes !== undefined ? dayNotes : existing.dayNotes,
+          verifiedByAdmin: true,
+          verifiedAt: existing.verifiedAt || timeOnly,
+          savedAt: existing.savedAt || timestamp,
+          updatedAt: timestamp,
+        },
+      };
+    });
+  };
+
+  const handleUpdateDayNotes = (date: string, dayNotes: string) => {
+    if (!isAdmin) return;
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
+    setDailyLogs((prev) => {
+      const existing = buildDailyLogSnapshot(date, prev);
+      return {
+        ...prev,
+        [date]: {
+          ...existing,
+          dayNotes,
+          savedAt: existing.savedAt || timestamp,
+          updatedAt: timestamp,
+        },
+      };
+    });
+  };
+
+  const handleDeleteDayHistory = (date: string) => {
+    if (!isAdmin) return;
+    setDailyLogs((prev) => {
+      const next = { ...prev };
+      delete next[date];
+      return next;
+    });
+  };
+
   // Attendance Handlers (Admin exclusive)
   const handleUpdateAttendance = (
     studentId: string,
@@ -212,116 +263,134 @@ export default function App() {
     status: AttendanceStatus
   ) => {
     if (!isAdmin) return;
-    const existingLog = getOrCreateDailyLog(currentDate);
-    const existingStudentRec = existingLog.records[studentId] || {
-      periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
-      uniform: { status: 'compliant' },
-    };
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
+    setDailyLogs((prev) => {
+      const existingLog = buildDailyLogSnapshot(currentDate, prev);
+      const existingStudentRec = existingLog.records[studentId] || {
+        periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
+        uniform: { status: 'compliant' },
+      };
 
-    const updatedLog: DailyClassLog = {
-      ...existingLog,
-      records: {
-        ...existingLog.records,
-        [studentId]: {
-          ...existingStudentRec,
-          periods: {
-            ...existingStudentRec.periods,
-            [periodNumber]: status,
+      return {
+        ...prev,
+        [currentDate]: {
+          ...existingLog,
+          savedAt: existingLog.savedAt || timestamp,
+          updatedAt: timestamp,
+          records: {
+            ...existingLog.records,
+            [studentId]: {
+              ...existingStudentRec,
+              periods: {
+                ...existingStudentRec.periods,
+                [periodNumber]: status,
+              },
+            },
           },
         },
-      },
-    };
-
-    setDailyLogs((prev) => ({
-      ...prev,
-      [currentDate]: updatedLog,
-    }));
+      };
+    });
   };
 
   const handleBulkUpdatePeriod = (periodNumber: number, status: AttendanceStatus) => {
     if (!isAdmin) return;
-    const existingLog = getOrCreateDailyLog(currentDate);
-    const newRecords = { ...existingLog.records };
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
+    setDailyLogs((prev) => {
+      const existingLog = buildDailyLogSnapshot(currentDate, prev);
+      const newRecords = { ...existingLog.records };
 
-    students.forEach((stu) => {
-      const rec = newRecords[stu.id] || {
-        periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
-        uniform: { status: 'compliant' },
-      };
-      newRecords[stu.id] = {
-        ...rec,
-        periods: {
-          ...rec.periods,
-          [periodNumber]: status,
+      students.forEach((stu) => {
+        const rec = newRecords[stu.id] || {
+          periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
+          uniform: { status: 'compliant' },
+        };
+        newRecords[stu.id] = {
+          ...rec,
+          periods: {
+            ...rec.periods,
+            [periodNumber]: status,
+          },
+        };
+      });
+
+      return {
+        ...prev,
+        [currentDate]: {
+          ...existingLog,
+          savedAt: existingLog.savedAt || timestamp,
+          updatedAt: timestamp,
+          records: newRecords,
         },
       };
     });
-
-    setDailyLogs((prev) => ({
-      ...prev,
-      [currentDate]: {
-        ...existingLog,
-        records: newRecords,
-      },
-    }));
   };
 
   const handleBulkUpdateStudent = (studentId: string, status: AttendanceStatus) => {
     if (!isAdmin) return;
-    const existingLog = getOrCreateDailyLog(currentDate);
-    const rec = existingLog.records[studentId] || {
-      periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
-      uniform: { status: 'compliant' },
-    };
-
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
     const newPeriods: Record<number, AttendanceStatus> = {};
     for (let p = 1; p <= 7; p++) {
       newPeriods[p] = status;
     }
 
-    setDailyLogs((prev) => ({
-      ...prev,
-      [currentDate]: {
-        ...existingLog,
-        records: {
-          ...existingLog.records,
-          [studentId]: {
-            ...rec,
-            periods: newPeriods,
+    setDailyLogs((prev) => {
+      const existingLog = buildDailyLogSnapshot(currentDate, prev);
+      const rec = existingLog.records[studentId] || {
+        periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
+        uniform: { status: 'compliant' },
+      };
+
+      return {
+        ...prev,
+        [currentDate]: {
+          ...existingLog,
+          savedAt: existingLog.savedAt || timestamp,
+          updatedAt: timestamp,
+          records: {
+            ...existingLog.records,
+            [studentId]: {
+              ...rec,
+              periods: newPeriods,
+            },
           },
         },
-      },
-    }));
+      };
+    });
   };
 
   const handleBulkUpdateAll = (status: AttendanceStatus) => {
     if (!isAdmin) return;
-    const existingLog = getOrCreateDailyLog(currentDate);
-    const newRecords = { ...existingLog.records };
-
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
     const newPeriods: Record<number, AttendanceStatus> = {};
     for (let p = 1; p <= 7; p++) {
       newPeriods[p] = status;
     }
 
-    students.forEach((stu) => {
-      const rec = newRecords[stu.id] || {
-        periods: newPeriods,
-        uniform: { status: 'compliant' },
-      };
-      newRecords[stu.id] = {
-        ...rec,
-        periods: { ...newPeriods },
+    setDailyLogs((prev) => {
+      const existingLog = buildDailyLogSnapshot(currentDate, prev);
+      const newRecords = { ...existingLog.records };
+
+      students.forEach((stu) => {
+        const rec = newRecords[stu.id] || {
+          periods: newPeriods,
+          uniform: { status: 'compliant' },
+        };
+        newRecords[stu.id] = {
+          ...rec,
+          periods: { ...newPeriods },
+        };
+      });
+
+      return {
+        ...prev,
+        [currentDate]: {
+          ...existingLog,
+          savedAt: existingLog.savedAt || timestamp,
+          updatedAt: timestamp,
+          records: newRecords,
+        },
       };
     });
-
-    setDailyLogs((prev) => ({
-      ...prev,
-      [currentDate]: {
-        ...existingLog,
-        records: newRecords,
-      },
-    }));
   };
 
   // Uniform Handlers (Admin exclusive)
@@ -332,86 +401,101 @@ export default function App() {
     resolved?: boolean
   ) => {
     if (!isAdmin) return;
-    const existingLog = getOrCreateDailyLog(currentDate);
-    const rec = existingLog.records[studentId] || {
-      periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
-      uniform: { status: 'compliant' },
-    };
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
+    const timeOnly = getCurrentTimeString();
+    setDailyLogs((prev) => {
+      const existingLog = buildDailyLogSnapshot(currentDate, prev);
+      const rec = existingLog.records[studentId] || {
+        periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
+        uniform: { status: 'compliant' },
+      };
 
-    const updatedLog: DailyClassLog = {
-      ...existingLog,
-      records: {
-        ...existingLog.records,
-        [studentId]: {
-          ...rec,
-          uniform: {
-            status,
-            violationReason: reason,
-            inspectedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            resolved: resolved ?? false,
+      return {
+        ...prev,
+        [currentDate]: {
+          ...existingLog,
+          savedAt: existingLog.savedAt || timestamp,
+          updatedAt: timestamp,
+          records: {
+            ...existingLog.records,
+            [studentId]: {
+              ...rec,
+              uniform: {
+                status,
+                violationReason: reason,
+                inspectedAt: timeOnly,
+                resolved: resolved ?? false,
+              },
+            },
           },
         },
-      },
-    };
-
-    setDailyLogs((prev) => ({
-      ...prev,
-      [currentDate]: updatedLog,
-    }));
+      };
+    });
   };
 
   const handleMarkAllCompliant = () => {
     if (!isAdmin) return;
-    const existingLog = getOrCreateDailyLog(currentDate);
-    const newRecords = { ...existingLog.records };
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
+    const timeOnly = getCurrentTimeString();
+    setDailyLogs((prev) => {
+      const existingLog = buildDailyLogSnapshot(currentDate, prev);
+      const newRecords = { ...existingLog.records };
 
-    students.forEach((stu) => {
-      const rec = newRecords[stu.id] || {
-        periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
-        uniform: { status: 'compliant' },
-      };
-      const isExempt = rec.uniform.status === 'exempt';
-      newRecords[stu.id] = {
-        ...rec,
-        uniform: {
-          status: isExempt ? 'exempt' : 'compliant',
-          violationReason: isExempt ? rec.uniform.violationReason : undefined,
-          inspectedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      students.forEach((stu) => {
+        const rec = newRecords[stu.id] || {
+          periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
+          uniform: { status: 'compliant' },
+        };
+        const isExempt = rec.uniform.status === 'exempt';
+        newRecords[stu.id] = {
+          ...rec,
+          uniform: {
+            status: isExempt ? 'exempt' : 'compliant',
+            violationReason: isExempt ? rec.uniform.violationReason : undefined,
+            inspectedAt: timeOnly,
+          },
+        };
+      });
+
+      return {
+        ...prev,
+        [currentDate]: {
+          ...existingLog,
+          savedAt: existingLog.savedAt || timestamp,
+          updatedAt: timestamp,
+          records: newRecords,
         },
       };
     });
-
-    setDailyLogs((prev) => ({
-      ...prev,
-      [currentDate]: {
-        ...existingLog,
-        records: newRecords,
-      },
-    }));
   };
 
   // Daily Remark Handler
   const handleUpdateDailyRemark = (studentId: string, remark: string) => {
     if (!isAdmin) return;
-    const existingLog = getOrCreateDailyLog(currentDate);
-    const rec = existingLog.records[studentId] || {
-      periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
-      uniform: { status: 'compliant' },
-    };
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
+    setDailyLogs((prev) => {
+      const existingLog = buildDailyLogSnapshot(currentDate, prev);
+      const rec = existingLog.records[studentId] || {
+        periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
+        uniform: { status: 'compliant' },
+      };
 
-    setDailyLogs((prev) => ({
-      ...prev,
-      [currentDate]: {
-        ...existingLog,
-        records: {
-          ...existingLog.records,
-          [studentId]: {
-            ...rec,
-            dailyRemark: remark,
+      return {
+        ...prev,
+        [currentDate]: {
+          ...existingLog,
+          savedAt: existingLog.savedAt || timestamp,
+          updatedAt: timestamp,
+          records: {
+            ...existingLog.records,
+            [studentId]: {
+              ...rec,
+              dailyRemark: remark,
+            },
           },
         },
-      },
-    }));
+      };
+    });
   };
 
   // Student Profile Updates
@@ -425,7 +509,6 @@ export default function App() {
   const handleAddStudent = (newStudent: Student) => {
     if (!isAdmin) return;
     setStudents((prev) => [...prev, newStudent]);
-    const existingLog = getOrCreateDailyLog(currentDate);
     const defaultPeriods: Record<number, AttendanceStatus> = {
       1: 'present',
       2: 'present',
@@ -435,28 +518,34 @@ export default function App() {
       6: 'present',
       7: 'present',
     };
-    const updatedRecords = {
-      ...existingLog.records,
-      [newStudent.id]: {
-        periods: defaultPeriods,
-        uniform: { status: 'compliant' as const },
-      },
-    };
-    setDailyLogs((prev) => ({
-      ...prev,
-      [currentDate]: {
-        ...existingLog,
-        records: updatedRecords,
-      },
-    }));
+    const timestamp = `${getTodayDateString()} ${getCurrentTimeString()}`;
+    setDailyLogs((prev) => {
+      const existingLog = buildDailyLogSnapshot(currentDate, prev);
+      return {
+        ...prev,
+        [currentDate]: {
+          ...existingLog,
+          savedAt: existingLog.savedAt || timestamp,
+          updatedAt: timestamp,
+          records: {
+            ...existingLog.records,
+            [newStudent.id]: {
+              periods: defaultPeriods,
+              uniform: { status: 'compliant' as const },
+            },
+          },
+        },
+      };
+    });
   };
 
   // Student messaging / leave request note
   const handleSendStudentNote = (studentId: string, noteText: string) => {
     const authorName = currentUser?.displayName || 'Сурагч';
+    const todayStr = getTodayDateString();
     const newEntry: NoteEntry = {
       id: `note-${studentId}-${Date.now()}`,
-      date: new Date().toISOString().slice(0, 10),
+      date: todayStr,
       author: authorName,
       category: 'Чөлөө хүсэлт',
       content: noteText,
@@ -472,7 +561,31 @@ export default function App() {
       })
     );
 
-    handleUpdateDailyRemark(studentId, `[Чөлөө хүсэлт]: ${noteText}`);
+    // Also attach leave request remark directly to today's daily log
+    const timestamp = `${todayStr} ${getCurrentTimeString()}`;
+    setDailyLogs((prev) => {
+      const existingLog = buildDailyLogSnapshot(currentDate, prev);
+      const rec = existingLog.records[studentId] || {
+        periods: { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' },
+        uniform: { status: 'compliant' },
+      };
+
+      return {
+        ...prev,
+        [currentDate]: {
+          ...existingLog,
+          savedAt: existingLog.savedAt || timestamp,
+          updatedAt: timestamp,
+          records: {
+            ...existingLog.records,
+            [studentId]: {
+              ...rec,
+              dailyRemark: `[Чөлөө хүсэлт]: ${noteText}`,
+            },
+          },
+        },
+      };
+    });
   };
 
   const handleResetData = () => {
@@ -486,10 +599,24 @@ export default function App() {
     setSelectedStudent(null);
   };
 
+  const buildBackupJson = () =>
+    JSON.stringify(
+      {
+        exportedAt: `${getTodayDateString()} ${getCurrentTimeString()}`,
+        config,
+        students,
+        dailyLogs,
+        homework,
+      },
+      null,
+      2
+    );
+
   // If user is not yet logged in: Render Registration / Sign-up Screen at the beginning of the app
   if (!currentUser) {
     return (
       <>
+        <OfflineIndicator />
         <WelcomeAuthScreen
           config={config}
           students={students}
@@ -501,6 +628,8 @@ export default function App() {
         <DownloadAppModal
           isOpen={isDownloadModalOpen}
           onClose={() => setIsDownloadModalOpen(false)}
+          pwaInstall={pwaInstall}
+          onExportBackup={buildBackupJson}
         />
       </>
     );
@@ -513,12 +642,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
+      <OfflineIndicator />
+
       {/* Top Navigation Bar with Blue Highlights */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         config={config}
         currentUser={currentUser}
+        studentsCount={students.length}
+        savedDaysCount={savedDaysCount}
+        isAppInstalled={pwaInstall.isInstalled}
+        isAppInstallable={pwaInstall.isInstallable}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
         onQuickAction={() => setIsAddStudentOpen(true)}
@@ -533,6 +668,7 @@ export default function App() {
           <StudentPortalView
             student={loggedInStudent}
             dailyLog={currentDailyLog}
+            dailyLogs={dailyLogs}
             config={config}
             currentDate={currentDate}
             homework={homework}
@@ -545,16 +681,19 @@ export default function App() {
           /* Administrator View */
           <>
             {/* KPI Summary Strip & Date Selector */}
-            {activeTab !== 'reports' && activeTab !== 'schedule' && activeTab !== 'homework' && (
+            {activeTab !== 'reports' && activeTab !== 'schedule' && activeTab !== 'homework' && activeTab !== 'history' && (
               <StatsOverview
                 currentDate={currentDate}
                 setCurrentDate={setCurrentDate}
                 students={students}
                 dailyLog={currentDailyLog}
+                isDateSavedInHistory={Boolean(dailyLogs[currentDate])}
+                savedDaysCount={savedDaysCount}
                 config={config}
                 currentUser={currentUser}
                 onNavigateTab={setActiveTab}
                 onOpenEditClassInfo={() => setIsEditClassInfoOpen(true)}
+                onSaveDayToHistory={(date) => handleSaveDayToHistory(date)}
               />
             )}
 
@@ -569,8 +708,37 @@ export default function App() {
                 onBulkUpdatePeriod={handleBulkUpdatePeriod}
                 onBulkUpdateStudent={handleBulkUpdateStudent}
                 onBulkUpdateAll={handleBulkUpdateAll}
-                onSelectStudent={(stu) => setSelectedStudent(stu)}
+                onSelectStudent={(stu) => {
+                  setDetailModalDate(null);
+                  setSelectedStudent(stu);
+                }}
                 onUpdateDailyRemark={handleUpdateDailyRemark}
+              />
+            )}
+
+            {/* Tab 1B: Daily History & Archive Viewer */}
+            {activeTab === 'history' && (
+              <DailyHistoryView
+                students={students}
+                dailyLogs={dailyLogs}
+                config={config}
+                currentDate={currentDate}
+                isAdmin={isAdmin}
+                onSelectDateToEdit={(date) => {
+                  setCurrentDate(date);
+                  setActiveTab('attendance');
+                }}
+                onOpenReportForDate={(date) => {
+                  setCurrentDate(date);
+                  setActiveTab('reports');
+                }}
+                onSaveDayToHistory={handleSaveDayToHistory}
+                onUpdateDayNotes={handleUpdateDayNotes}
+                onDeleteDayHistory={handleDeleteDayHistory}
+                onSelectStudent={(stu, date) => {
+                  setDetailModalDate(date || null);
+                  setSelectedStudent(stu);
+                }}
               />
             )}
 
@@ -587,6 +755,7 @@ export default function App() {
             {activeTab === 'homework' && (
               <HomeworkReminders
                 homework={homework}
+                studentsCount={students.length}
                 isAdmin={isAdmin}
                 currentStudentId={currentUser?.studentId}
                 onAddHomework={handleAddHomework}
@@ -601,10 +770,14 @@ export default function App() {
                 students={students}
                 dailyLog={currentDailyLog}
                 currentDate={currentDate}
+                config={config}
                 isAdmin={isAdmin}
                 onUpdateUniform={handleUpdateUniform}
                 onMarkAllCompliant={handleMarkAllCompliant}
-                onSelectStudent={(stu) => setSelectedStudent(stu)}
+                onSelectStudent={(stu) => {
+                  setDetailModalDate(null);
+                  setSelectedStudent(stu);
+                }}
               />
             )}
 
@@ -612,8 +785,12 @@ export default function App() {
             {activeTab === 'directory' && (
               <StudentDirectory
                 students={students}
+                className={config.className}
                 isAdmin={isAdmin}
-                onSelectStudent={(stu) => setSelectedStudent(stu)}
+                onSelectStudent={(stu) => {
+                  setDetailModalDate(null);
+                  setSelectedStudent(stu);
+                }}
                 onOpenAddStudent={() => setIsAddStudentOpen(true)}
               />
             )}
@@ -649,7 +826,7 @@ export default function App() {
               onClick={() => setIsDownloadModalOpen(true)}
               className="text-blue-600 hover:underline font-semibold"
             >
-              App Store / Google Play
+              {pwaInstall.isInstalled ? 'Апп суусан ✓' : 'Апп суулгах (PWA)'}
             </button>
             <span aria-hidden="true">·</span>
             <span>Нэвтэрсэн:</span>
@@ -664,9 +841,14 @@ export default function App() {
       {selectedStudent && (
         <StudentDetailModal
           student={selectedStudent}
-          dailyLog={currentDailyLog}
+          dailyLog={detailModalDate && dailyLogs[detailModalDate] ? dailyLogs[detailModalDate] : currentDailyLog}
+          periods={config.periods}
+          adminName={config.adminName}
           isAdmin={isAdmin}
-          onClose={() => setSelectedStudent(null)}
+          onClose={() => {
+            setSelectedStudent(null);
+            setDetailModalDate(null);
+          }}
           onUpdateStudent={handleUpdateStudent}
         />
       )}
@@ -697,10 +879,12 @@ export default function App() {
         onSaveConfig={handleSaveConfig}
       />
 
-      {/* App Store and Google Play Download Modal */}
+      {/* PWA Install & Backup Modal */}
       <DownloadAppModal
         isOpen={isDownloadModalOpen}
         onClose={() => setIsDownloadModalOpen(false)}
+        pwaInstall={pwaInstall}
+        onExportBackup={buildBackupJson}
       />
     </div>
   );

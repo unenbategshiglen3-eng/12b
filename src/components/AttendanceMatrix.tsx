@@ -137,7 +137,7 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="34 сурагчаас нэр, дугаараар хайх..."
+              placeholder={`${students.length} сурагчаас нэр, дугаараар хайх...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
@@ -203,7 +203,7 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
             <button
               onClick={() => onBulkUpdateAll('present')}
               className="px-3.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs"
-              title="34 сурагчийг бүтэн өдрөөр нь 'Ирсэн' гэж тэмдэглэх"
+              title={`${students.length} сурагчийг бүтэн өдрөөр нь 'Ирсэн' гэж тэмдэглэх`}
             >
               <CheckCheck className="w-3.5 h-3.5" />
               Бүгдийг ирснээр тэмдэглэх (7 цаг)
@@ -223,7 +223,7 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
             className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap"
           >
             <ArrowUpDown className="w-3.5 h-3.5" />
-            Эрэмбэ: № {sortAsc ? '1-34' : '34-1'}
+            Эрэмбэ: № {sortAsc ? `1-${students.length}` : `${students.length}-1`}
           </button>
         </div>
       </div>
@@ -249,8 +249,8 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
             <span>Чөлөөтэй</span>
           </span>
         </div>
-        <div className="text-[11px] text-blue-800 font-medium italic">
-          {isAdmin ? 'Нүдэн дээр дарж ирцийг ээлжлэн солих боломжтой (И ➔ Х ➔ Т ➔ Ч)' : 'Сурагчид өөрийн мэдээллээ хянаж харах боломжтой'}
+        <div className="text-[11px] text-blue-800 font-medium">
+          {isAdmin ? 'Нүдэн дээр дарж ирцийг солино уу (И ➔ Х ➔ Т ➔ Ч) · Бүх өөрчлөлт өдрийн түүхэнд хадгалагдана' : 'Сурагчид өөрийн мэдээллээ хянаж харах боломжтой'}
         </div>
       </div>
 
@@ -291,9 +291,6 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
               <th className="py-2.5 px-3 font-bold text-center border-r border-blue-600/70 min-w-[95px]">
                 Дүрэмт хувцас
               </th>
-              <th className="py-2.5 px-3 font-bold text-center border-r border-blue-600/70 min-w-[95px]">
-                Төлбөр
-              </th>
               <th className="py-2.5 px-3 font-bold min-w-[170px]">
                 Багшийн тэмдэглэл
               </th>
@@ -308,7 +305,7 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
           <tbody className="divide-y divide-slate-100">
             {filteredStudents.length === 0 ? (
               <tr>
-                <td colSpan={13} className="py-12 text-center text-slate-500">
+                <td colSpan={isAdmin ? 12 : 11} className="py-12 text-center text-slate-500">
                   Хайлтад тохирох сурагч олдсонгүй.
                 </td>
               </tr>
@@ -347,9 +344,6 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
                         <span className="font-mono text-[10px] text-slate-400 tabular-nums shrink-0">
                           {stu.id}
                         </span>
-                      </div>
-                      <div className="text-[10px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
-                        <span>{stu.gender}</span>
                       </div>
                     </td>
 
@@ -420,36 +414,6 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
                         >
                           <span>Чөлөө</span>
                         </span>
-                      )}
-                    </td>
-
-                    {/* Payment Status Column */}
-                    <td className="py-2 px-2 text-center border-r border-slate-200/60">
-                      {stu.payment.status === 'paid' && (
-                        <span className="text-[11px] font-bold text-emerald-700">
-                          Төлсөн
-                        </span>
-                      )}
-                      {stu.payment.status === 'partial' && (
-                        <div className="text-[11px] leading-tight">
-                          <span className="font-bold text-amber-700">Дутуу</span>
-                          <div className="text-[10px] text-slate-500 font-mono tabular-nums">
-                            -₮{(stu.payment.balanceDue / 1000).toFixed(0)}к
-                          </div>
-                        </div>
-                      )}
-                      {stu.payment.status === 'pending' && (
-                        <span className="text-[11px] font-medium text-slate-600">
-                          Төлөөгүй
-                        </span>
-                      )}
-                      {stu.payment.status === 'overdue' && (
-                        <div className="text-[11px] leading-tight">
-                          <span className="font-bold text-rose-700">Хэтэрсэн</span>
-                          <div className="text-[10px] text-rose-600 font-mono tabular-nums">
-                            ₮{(stu.payment.balanceDue / 1000).toFixed(0)}к
-                          </div>
-                        </div>
                       )}
                     </td>
 
@@ -534,8 +498,8 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
                   </div>
                 </td>
               ))}
-              <td colSpan={isAdmin ? 4 : 3} className="py-2.5 px-3 text-xs text-blue-800 text-right font-bold">
-                Нийт 34 сурагч
+              <td colSpan={isAdmin ? 3 : 2} className="py-2.5 px-3 text-xs text-blue-800 text-right font-bold">
+                Нийт {students.length} сурагч
               </td>
             </tr>
           </tfoot>
