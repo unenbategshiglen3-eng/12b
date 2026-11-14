@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Student, DailyClassLog, HomeworkItem, ClassroomConfig, WeekdayName } from '../types';
+import { Student, DailyClassLog, ClassroomConfig, WeekdayName, PeriodInfo } from '../types';
 import { WEEKDAYS } from '../data/mockStudents';
 import { getMongolianWeekday } from '../utils/dateUtils';
-import { CheckCircle2, Shirt, BookOpen, Clock, Phone, Send, ShieldAlert, Check, Download, History } from 'lucide-react';
+import { CheckCircle2, Shirt, Phone, Send, ShieldAlert, Check, Download, History } from 'lucide-react';
 
 interface StudentPortalViewProps {
   student: Student;
@@ -10,10 +10,8 @@ interface StudentPortalViewProps {
   dailyLogs?: Record<string, DailyClassLog>;
   config: ClassroomConfig;
   currentDate: string;
-  homework: HomeworkItem[];
   onSendStudentNote: (studentId: string, noteText: string) => void;
   onUpdateParentPhone: (studentId: string, fatherPhone: string, motherPhone: string) => void;
-  onToggleCompleteHomework: (homeworkId: string, studentId: string) => void;
   onOpenDownloadModal: () => void;
 }
 
@@ -23,13 +21,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   dailyLogs = {},
   config,
   currentDate,
-  homework,
   onSendStudentNote,
   onUpdateParentPhone,
-  onToggleCompleteHomework,
   onOpenDownloadModal,
 }) => {
-  const [activeTab, setActiveTab] = useState<'attendance' | 'history' | 'schedule' | 'homework' | 'phone'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'history' | 'schedule' | 'phone'>('attendance');
   const [requestText, setRequestText] = useState('');
   const [sentSuccess, setSentSuccess] = useState(false);
 
@@ -40,6 +36,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
   // Weekly schedule day
   const [selectedDay, setSelectedDay] = useState<WeekdayName>('Даваа');
+
+  const todayPeriods: PeriodInfo[] = useMemo(() => {
+    const weekday = getMongolianWeekday(currentDate) as WeekdayName;
+    if (config.weeklyTimetable && config.weeklyTimetable[weekday]?.length > 0) {
+      return config.weeklyTimetable[weekday];
+    }
+    return config.periods || [];
+  }, [currentDate, config]);
 
   const studentDaily = dailyLog.records[student.id];
   const pMap = studentDaily?.periods || { 1: 'present', 2: 'present', 3: 'present', 4: 'present', 5: 'present', 6: 'present', 7: 'present' };
@@ -188,15 +192,6 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             5 өдрийн хуваарь
           </button>
           <button
-            onClick={() => setActiveTab('homework')}
-            className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'homework' ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-100 hover:text-white'
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            Гэрийн даалгаврын сануулга ({homework.length})
-          </button>
-          <button
             onClick={() => setActiveTab('phone')}
             className={`px-3.5 py-1.5 rounded-xl transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
               activeTab === 'phone' ? 'bg-white text-blue-900 shadow-sm' : 'text-blue-100 hover:text-white'
@@ -227,7 +222,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(config.periods || []).map((period) => {
+              {todayPeriods.map((period) => {
                 const status = pMap[period.periodNumber] || 'present';
                 const disp = getStatusDisplay(status);
 
@@ -483,77 +478,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
         </div>
       )}
 
-      {/* TAB 3: HOMEWORK REMINDERS */}
-      {activeTab === 'homework' && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div>
-              <div className="text-xs font-bold uppercase tracking-wider text-blue-600">
-                Даалгаврын хуваарь
-              </div>
-              <h2 className="text-base font-extrabold text-slate-900">
-                Гэрийн даалгаврын сануулга & Явц
-              </h2>
-            </div>
-            <span className="text-xs text-slate-500 font-mono font-bold">
-              Нийт {homework.length} даалгавар өгөгдсөн
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {homework.map((item) => {
-              const isCompleted = item.completedBy.includes(student.id);
-
-              return (
-                <div
-                  key={item.id}
-                  className={`p-4 rounded-2xl border transition-all space-y-2 ${
-                    isCompleted ? 'bg-emerald-50/30 border-emerald-200' : 'bg-slate-50 border-slate-200 hover:border-blue-300'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                        {item.weekday} · {item.periodNumber}-р цаг
-                      </span>
-                      <span className="ml-2 font-bold text-slate-800 text-xs">
-                        {item.subject}
-                      </span>
-                      <h4 className="font-extrabold text-slate-900 text-sm mt-1">
-                        {item.title}
-                      </h4>
-                    </div>
-
-                    <button
-                      onClick={() => onToggleCompleteHomework(item.id, student.id)}
-                      className={`px-3 py-1 text-xs font-bold rounded-xl transition-colors flex items-center gap-1 ${
-                        isCompleted ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      {isCompleted ? 'Хийсэн ✓' : 'Хийсэн гэж тэмдэглэх'}
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-slate-600 bg-white p-2.5 rounded-xl border border-slate-200">
-                    {item.description}
-                  </p>
-
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                    <span className="text-blue-700 font-semibold flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      Хугацаа: {item.dueDate} {item.dueTime}
-                    </span>
-                    <span>Багш: {item.teacherName}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: PARENT PHONE NUMBERS (Requested Feature) */}
+      {/* TAB 3: PARENT PHONE NUMBERS */}
       {activeTab === 'phone' && (
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4 max-w-xl mx-auto">
           <div className="pb-3 border-b border-slate-100">
@@ -565,7 +490,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <span>Өөрийн дугаар бүртгэх / шинэчлэх</span>
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Сургууль, ангийн багшаас ирц болон гэрийн даалгаврын мэдээллийг шуурхай авах өөрийн гар утасны дугаарыг энд оруулна уу.
+              Сургууль, ангийн багшаас ирцийн болон ангийн мэдээллийг шуурхай авах өөрийн гар утасны дугаарыг энд оруулна уу.
             </p>
           </div>
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { ClassroomConfig, UserAccount } from '../types';
 import { Shield, User, LogOut, ChevronDown, Edit3, Smartphone, CheckCircle2 } from 'lucide-react';
 
-export type AppTab = 'attendance' | 'history' | 'schedule' | 'homework' | 'uniform' | 'directory' | 'reports';
+export type AppTab = 'attendance' | 'history' | 'schedule' | 'uniform' | 'directory' | 'reports';
 
 interface HeaderProps {
   activeTab: AppTab;
@@ -103,16 +103,6 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 5 өдрийн хуваарь
-              </button>
-              <button
-                onClick={() => setActiveTab('homework')}
-                className={`whitespace-nowrap shrink-0 py-1.5 transition-colors ${
-                  activeTab === 'homework'
-                    ? 'text-blue-600 font-bold border-b-2 border-blue-600'
-                    : 'text-slate-600 hover:text-blue-600'
-                }`}
-              >
-                Гэрийн даалгавар
               </button>
               <button
                 onClick={() => setActiveTab('uniform')}
@@ -238,12 +228,6 @@ export const Header: React.FC<HeaderProps> = ({
             className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-md ${activeTab === 'schedule' ? 'bg-blue-600 text-white font-bold' : ''}`}
           >
             5 өдрийн хуваарь
-          </button>
-          <button
-            onClick={() => setActiveTab('homework')}
-            className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-md ${activeTab === 'homework' ? 'bg-blue-600 text-white font-bold' : ''}`}
-          >
-            Даалгавар
           </button>
           <button
             onClick={() => setActiveTab('uniform')}

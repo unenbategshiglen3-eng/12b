@@ -5,7 +5,6 @@ import {
   ClassroomConfig,
   UserAccount,
   NoteEntry,
-  HomeworkItem,
   WeekdayName,
   PeriodInfo,
   AttendanceStatus,
@@ -22,17 +21,14 @@ import {
   saveStoredAccounts,
   loadStoredCurrentUser,
   saveStoredCurrentUser,
-  loadStoredHomework,
-  saveStoredHomework,
   resetAllDataToDefault,
 } from './utils/storage';
-import { getTodayDateString, getCurrentTimeString } from './utils/dateUtils';
+import { getTodayDateString, getCurrentTimeString, getMongolianWeekday } from './utils/dateUtils';
 import { Header, AppTab } from './components/Header';
 import { StatsOverview } from './components/StatsOverview';
 import { AttendanceMatrix } from './components/AttendanceMatrix';
 import { DailyHistoryView } from './components/DailyHistoryView';
 import { WeeklyScheduleView } from './components/WeeklyScheduleView';
-import { HomeworkReminders } from './components/HomeworkReminders';
 import { UniformTracker } from './components/UniformTracker';
 import { StudentDirectory } from './components/StudentDirectory';
 import { DailyReportPrintView } from './components/DailyReportPrintView';
@@ -55,7 +51,6 @@ export default function App() {
   const [config, setConfig] = useState<ClassroomConfig>(() => loadStoredConfig());
   const [accounts, setAccounts] = useState<UserAccount[]>(() => loadStoredAccounts());
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => loadStoredCurrentUser());
-  const [homework, setHomework] = useState<HomeworkItem[]>(() => loadStoredHomework());
   const [currentDate, setCurrentDate] = useState<string>(() => getTodayDateString());
   const [activeTab, setActiveTab] = useState<AppTab>('attendance');
 
@@ -90,11 +85,21 @@ export default function App() {
     saveStoredCurrentUser(currentUser);
   }, [currentUser]);
 
-  useEffect(() => {
-    saveStoredHomework(homework);
-  }, [homework]);
-
   const isAdmin = currentUser?.role === 'admin';
+
+  // Derive periods for any date from the saved 5-day weekly timetable (fallback to config.periods)
+  const getPeriodsForDate = (dateStr: string, cfg: ClassroomConfig): PeriodInfo[] => {
+    const weekday = getMongolianWeekday(dateStr) as WeekdayName;
+    if (cfg.weeklyTimetable && cfg.weeklyTimetable[weekday] && cfg.weeklyTimetable[weekday].length > 0) {
+      return cfg.weeklyTimetable[weekday];
+    }
+    return cfg.periods;
+  };
+
+  const currentDatePeriods = useMemo(
+    () => getPeriodsForDate(currentDate, config),
+    [currentDate, config]
+  );
 
   // Purely derive the active day's log without mutating state during render
   const buildDailyLogSnapshot = (date: string, sourceLogs: Record<string, DailyClassLog>): DailyClassLog => {
@@ -150,17 +155,25 @@ export default function App() {
     );
   };
 
-  // Update weekly timetable
+  // Update weekly timetable and persist immediately
   const handleUpdateWeeklyTimetable = (updatedTimetable: Record<WeekdayName, PeriodInfo[]>) => {
-    setConfig((prev) => ({
-      ...prev,
-      weeklyTimetable: updatedTimetable,
-    }));
+    setConfig((prev) => {
+      const weekday = getMongolianWeekday(currentDate) as WeekdayName;
+      const activePeriods = updatedTimetable[weekday] || prev.periods;
+      const nextConfig: ClassroomConfig = {
+        ...prev,
+        periods: activePeriods,
+        weeklyTimetable: updatedTimetable,
+      };
+      saveStoredConfig(nextConfig);
+      return nextConfig;
+    });
   };
 
   // Save config (School name, Class name, Teacher name)
   const handleSaveConfig = (newConfig: ClassroomConfig) => {
     setConfig(newConfig);
+    saveStoredConfig(newConfig);
     // Also update admin account display name if teacher name changed
     if (newConfig.adminName) {
       setAccounts((prev) =>
@@ -176,37 +189,6 @@ export default function App() {
         );
       }
     }
-  };
-
-  // Homework Handlers
-  const handleAddHomework = (item: Omit<HomeworkItem, 'id' | 'completedBy' | 'assignedDate'>) => {
-    const newItem: HomeworkItem = {
-      ...item,
-      id: `hw-${Date.now()}`,
-      assignedDate: currentDate,
-      completedBy: [],
-    };
-    setHomework((prev) => [newItem, ...prev]);
-  };
-
-  const handleToggleHomework = (homeworkId: string, studentId: string) => {
-    setHomework((prev) =>
-      prev.map((h) => {
-        if (h.id !== homeworkId) return h;
-        const already = h.completedBy.includes(studentId);
-        return {
-          ...h,
-          completedBy: already
-            ? h.completedBy.filter((id) => id !== studentId)
-            : [...h.completedBy, studentId],
-        };
-      })
-    );
-  };
-
-  const handleDeleteHomework = (homeworkId: string) => {
-    if (!isAdmin) return;
-    setHomework((prev) => prev.filter((h) => h.id !== homeworkId));
   };
 
   // History Management Handlers
@@ -589,13 +571,12 @@ export default function App() {
   };
 
   const handleResetData = () => {
-    const { students: resetStudents, logs: resetLogs, config: resetConfig, accounts: resetAccounts, currentUser: resetUser, homework: resetHomework } = resetAllDataToDefault();
+    const { students: resetStudents, logs: resetLogs, config: resetConfig, accounts: resetAccounts, currentUser: resetUser } = resetAllDataToDefault();
     setStudents(resetStudents);
     setDailyLogs(resetLogs);
     setConfig(resetConfig);
     setAccounts(resetAccounts);
     setCurrentUser(resetUser);
-    setHomework(resetHomework);
     setSelectedStudent(null);
   };
 
@@ -606,7 +587,6 @@ export default function App() {
         config,
         students,
         dailyLogs,
-        homework,
       },
       null,
       2
@@ -671,17 +651,15 @@ export default function App() {
             dailyLogs={dailyLogs}
             config={config}
             currentDate={currentDate}
-            homework={homework}
             onSendStudentNote={handleSendStudentNote}
             onUpdateParentPhone={handleUpdateParentPhone}
-            onToggleCompleteHomework={handleToggleHomework}
             onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
           />
         ) : (
           /* Administrator View */
           <>
             {/* KPI Summary Strip & Date Selector */}
-            {activeTab !== 'reports' && activeTab !== 'schedule' && activeTab !== 'homework' && activeTab !== 'history' && (
+            {activeTab !== 'reports' && activeTab !== 'schedule' && activeTab !== 'history' && (
               <StatsOverview
                 currentDate={currentDate}
                 setCurrentDate={setCurrentDate}
@@ -702,7 +680,7 @@ export default function App() {
               <AttendanceMatrix
                 students={students}
                 dailyLog={currentDailyLog}
-                periods={config.periods}
+                periods={currentDatePeriods}
                 isAdmin={isAdmin}
                 onUpdateAttendance={handleUpdateAttendance}
                 onBulkUpdatePeriod={handleBulkUpdatePeriod}
@@ -751,20 +729,7 @@ export default function App() {
               />
             )}
 
-            {/* Tab 3: Homework Reminders & SMS notifications */}
-            {activeTab === 'homework' && (
-              <HomeworkReminders
-                homework={homework}
-                studentsCount={students.length}
-                isAdmin={isAdmin}
-                currentStudentId={currentUser?.studentId}
-                onAddHomework={handleAddHomework}
-                onToggleComplete={handleToggleHomework}
-                onDeleteHomework={handleDeleteHomework}
-              />
-            )}
-
-            {/* Tab 4: Uniform Inspection */}
+            {/* Tab 3: Uniform Inspection */}
             {activeTab === 'uniform' && (
               <UniformTracker
                 students={students}
@@ -842,7 +807,7 @@ export default function App() {
         <StudentDetailModal
           student={selectedStudent}
           dailyLog={detailModalDate && dailyLogs[detailModalDate] ? dailyLogs[detailModalDate] : currentDailyLog}
-          periods={config.periods}
+          periods={detailModalDate ? getPeriodsForDate(detailModalDate, config) : currentDatePeriods}
           adminName={config.adminName}
           isAdmin={isAdmin}
           onClose={() => {

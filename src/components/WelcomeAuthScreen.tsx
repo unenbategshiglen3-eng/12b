@@ -188,7 +188,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
             {config.className}-ийн цахим бүртгэл
           </h2>
           <p className="text-xs text-blue-100 mt-1">
-            {students.length} сурагч өөрийн дугаараар бүртгүүлэн 5 өдрийн хуваарь, ирц, гэрийн даалгавраа хянана.
+            {students.length} сурагч өөрийн дугаараар бүртгүүлэн 5 өдрийн хуваарь, ирц, дүрэмт хувцсаа хянана.
           </p>
 
           {/* Mode Switcher Tabs */}
@@ -287,7 +287,7 @@ export const WelcomeAuthScreen: React.FC<WelcomeAuthScreenProps> = ({
                   className="w-full px-3 py-2 bg-white border border-blue-300 rounded-lg text-xs font-bold text-blue-950 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
                 <span className="text-[10px] text-blue-700 block">
-                  Мэдэгдэл болон гэрийн даалгаврын мэдээлэл энэ дугаарт холбогдоно.
+                  Ангийн багшийн мэдэгдэл болон ирцийн мэдээлэл энэ дугаарт холбогдоно.
                 </span>
               </div>
 

@@ -95,21 +95,6 @@ export interface PeriodInfo {
 
 export type WeekdayName = 'Даваа' | 'Мягмар' | 'Лхагва' | 'Пүрэв' | 'Баасан';
 
-export interface HomeworkItem {
-  id: string;
-  subject: string;
-  title: string;
-  description: string;
-  weekday: WeekdayName;
-  periodNumber: number;
-  dueDate: string;
-  dueTime: string;
-  priority: 'Яаралтай' | 'Чухал' | 'Энгийн';
-  assignedDate: string;
-  teacherName: string;
-  completedBy: string[]; // student IDs
-}
-
 export interface StudentDailyRecord {
   periods: Record<number, AttendanceStatus>;
   uniform: {

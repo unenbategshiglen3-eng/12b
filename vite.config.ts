@@ -22,7 +22,7 @@ export default defineConfig(() => {
           id: '/',
           name: 'Нийслэлийн 13-р сургууль - 12Б анги',
           short_name: '12Б Анги',
-          description: '34 сурагчийн 7 цагийн ирц, өдрийн түүх, дүрэмт хувцас, гэрийн даалгаврын цахим систем',
+          description: '34 сурагчийн 7 цагийн ирц, өдрийн түүх, дүрэмт хувцасны цахим систем',
           theme_color: '#2563eb',
           background_color: '#f8fafc',
           display: 'standalone',

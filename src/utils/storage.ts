@@ -1,14 +1,14 @@
-import { Student, DailyClassLog, ClassroomConfig, UserAccount, HomeworkItem } from '../types';
-import { generateInitialStudents, generateInitialDailyLogsHistory, DEFAULT_CONFIG, INITIAL_HOMEWORK } from '../data/mockStudents';
+import { Student, DailyClassLog, ClassroomConfig, UserAccount } from '../types';
+import { generateInitialStudents, generateInitialDailyLogsHistory, DEFAULT_CONFIG, DEFAULT_WEEKLY_TIMETABLE } from '../data/mockStudents';
 import { getTodayDateString, getMongolianWeekday } from './dateUtils';
 
 const STORAGE_KEYS = {
   STUDENTS: 'classpulse_students_13_v6',
   DAILY_LOGS: 'classpulse_daily_logs_13_v6',
-  CONFIG: 'classpulse_config_13_v6',
+  CONFIG: 'classpulse_config_13_v7',
+  LEGACY_CONFIG: 'classpulse_config_13_v6',
   ACCOUNTS: 'classpulse_accounts_13_v6',
   CURRENT_USER: 'classpulse_current_user_13_v6',
-  HOMEWORK: 'classpulse_homework_13_v6',
   HAS_ENTERED: 'classpulse_has_entered_13_v6',
 };
 
@@ -130,8 +130,35 @@ export function loadStoredConfig(): ClassroomConfig {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed.schoolName && parsed.className) {
-        return parsed;
+        return {
+          ...DEFAULT_CONFIG,
+          ...parsed,
+          periods: Array.isArray(parsed.periods) && parsed.periods.length > 0 ? parsed.periods : DEFAULT_CONFIG.periods,
+          weeklyTimetable: {
+            ...DEFAULT_WEEKLY_TIMETABLE,
+            ...(parsed.weeklyTimetable || {}),
+          },
+        };
       }
+    }
+
+    // One-time migration from v6 config: keep school/class/admin metadata, apply newly imported timetable
+    const legacyRaw = localStorage.getItem(STORAGE_KEYS.LEGACY_CONFIG);
+    if (legacyRaw) {
+      const legacyParsed = JSON.parse(legacyRaw);
+      const migrated: ClassroomConfig = {
+        ...DEFAULT_CONFIG,
+        schoolName: legacyParsed.schoolName || DEFAULT_CONFIG.schoolName,
+        className: legacyParsed.className || DEFAULT_CONFIG.className,
+        grade: legacyParsed.grade || DEFAULT_CONFIG.grade,
+        academicYear: legacyParsed.academicYear || DEFAULT_CONFIG.academicYear,
+        roomNumber: legacyParsed.roomNumber || DEFAULT_CONFIG.roomNumber,
+        adminName: legacyParsed.adminName || DEFAULT_CONFIG.adminName,
+        periods: DEFAULT_CONFIG.periods,
+        weeklyTimetable: DEFAULT_WEEKLY_TIMETABLE,
+      };
+      localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(migrated));
+      return migrated;
     }
   } catch (err) {
     console.error('Error loading config:', err);
@@ -148,53 +175,27 @@ export function saveStoredConfig(config: ClassroomConfig): void {
   }
 }
 
-export function loadStoredHomework(): HomeworkItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.HOMEWORK);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.error('Error loading homework:', err);
-  }
-  localStorage.setItem(STORAGE_KEYS.HOMEWORK, JSON.stringify(INITIAL_HOMEWORK));
-  return INITIAL_HOMEWORK;
-}
-
-export function saveStoredHomework(items: HomeworkItem[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.HOMEWORK, JSON.stringify(items));
-  } catch (err) {
-    console.error('Error saving homework:', err);
-  }
-}
-
 export function resetAllDataToDefault(): {
   students: Student[];
   logs: Record<string, DailyClassLog>;
   config: ClassroomConfig;
   accounts: UserAccount[];
   currentUser: UserAccount;
-  homework: HomeworkItem[];
 } {
   const students = generateInitialStudents();
   const logs = generateInitialDailyLogsHistory(students);
   const config = DEFAULT_CONFIG;
   const accounts = [DEFAULT_ADMIN_ACCOUNT];
   const currentUser = DEFAULT_ADMIN_ACCOUNT;
-  const homework = INITIAL_HOMEWORK;
 
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
   localStorage.setItem(STORAGE_KEYS.DAILY_LOGS, JSON.stringify(logs));
   localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
   localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
   localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
-  localStorage.setItem(STORAGE_KEYS.HOMEWORK, JSON.stringify(homework));
+  localStorage.removeItem('classpulse_homework_13_v6');
 
-  return { students, logs, config, accounts, currentUser, homework };
+  return { students, logs, config, accounts, currentUser };
 }
 
 export function exportDailyAttendanceCSV(
