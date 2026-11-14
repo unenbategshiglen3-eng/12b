@@ -2,7 +2,7 @@ import React from 'react';
 import { ClassroomConfig, UserAccount } from '../types';
 import { Shield, User, LogOut, ChevronDown, Edit3, Smartphone, CheckCircle2 } from 'lucide-react';
 
-export type AppTab = 'attendance' | 'history' | 'schedule' | 'uniform' | 'directory' | 'reports';
+export type AppTab = 'attendance' | 'history' | 'schedule' | 'uniform' | 'directory' | 'logins' | 'reports';
 
 interface HeaderProps {
   activeTab: AppTab;
@@ -11,6 +11,7 @@ interface HeaderProps {
   currentUser: UserAccount;
   studentsCount?: number;
   savedDaysCount?: number;
+  loggedInStudentsCount?: number;
   isAppInstalled?: boolean;
   isAppInstallable?: boolean;
   onOpenAuthModal: () => void;
@@ -27,6 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentUser,
   studentsCount = 34,
   savedDaysCount = 0,
+  loggedInStudentsCount = 0,
   isAppInstalled = false,
   isAppInstallable = false,
   onOpenAuthModal,
@@ -123,6 +125,16 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 Сурагчид ({studentsCount})
+              </button>
+              <button
+                onClick={() => setActiveTab('logins')}
+                className={`whitespace-nowrap shrink-0 py-1.5 transition-colors ${
+                  activeTab === 'logins'
+                    ? 'text-blue-600 font-bold border-b-2 border-blue-600'
+                    : 'text-slate-600 hover:text-blue-600'
+                }`}
+              >
+                Нэвтрэлт ({loggedInStudentsCount}/{studentsCount})
               </button>
               <button
                 onClick={() => setActiveTab('reports')}
@@ -240,6 +252,12 @@ export const Header: React.FC<HeaderProps> = ({
             className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-md ${activeTab === 'directory' ? 'bg-blue-600 text-white font-bold' : ''}`}
           >
             Сурагчид ({studentsCount})
+          </button>
+          <button
+            onClick={() => setActiveTab('logins')}
+            className={`whitespace-nowrap shrink-0 px-2.5 py-1 rounded-md ${activeTab === 'logins' ? 'bg-blue-600 text-white font-bold' : ''}`}
+          >
+            Нэвтрэлт ({loggedInStudentsCount}/{studentsCount})
           </button>
           <button
             onClick={() => setActiveTab('reports')}

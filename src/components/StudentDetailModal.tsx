@@ -132,6 +132,16 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     <span>Цусны бүлэг: {formData.bloodGroup}</span>
                   </>
                 )}
+                <span aria-hidden="true">·</span>
+                {formData.accountRegistered || formData.lastLoginAt ? (
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/30 border border-emerald-300/40 text-emerald-100 font-bold">
+                    Нэвтэрсэн{formData.lastLoginAt ? `: ${formData.lastLoginAt}` : ' ✓'}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded bg-blue-800/60 text-blue-200">
+                    Системд нэвтрээгүй
+                  </span>
+                )}
               </div>
             </div>
           </div>

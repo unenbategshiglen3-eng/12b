@@ -1,4 +1,4 @@
-import { Student, DailyClassLog, ClassroomConfig, UserAccount } from '../types';
+import { Student, DailyClassLog, ClassroomConfig, UserAccount, StudentLoginEvent } from '../types';
 import { generateInitialStudents, generateInitialDailyLogsHistory, DEFAULT_CONFIG, DEFAULT_WEEKLY_TIMETABLE } from '../data/mockStudents';
 import { getTodayDateString, getMongolianWeekday } from './dateUtils';
 
@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   LEGACY_CONFIG: 'classpulse_config_13_v6',
   ACCOUNTS: 'classpulse_accounts_13_v6',
   CURRENT_USER: 'classpulse_current_user_13_v6',
+  LOGIN_EVENTS: 'classpulse_login_events_13_v1',
   HAS_ENTERED: 'classpulse_has_entered_13_v6',
 };
 
@@ -175,27 +176,53 @@ export function saveStoredConfig(config: ClassroomConfig): void {
   }
 }
 
+export function loadStoredLoginEvents(): StudentLoginEvent[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.LOGIN_EVENTS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error('Error loading login events:', err);
+  }
+  return [];
+}
+
+export function saveStoredLoginEvents(events: StudentLoginEvent[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.LOGIN_EVENTS, JSON.stringify(events));
+  } catch (err) {
+    console.error('Error saving login events:', err);
+  }
+}
+
 export function resetAllDataToDefault(): {
   students: Student[];
   logs: Record<string, DailyClassLog>;
   config: ClassroomConfig;
   accounts: UserAccount[];
   currentUser: UserAccount;
+  loginEvents: StudentLoginEvent[];
 } {
   const students = generateInitialStudents();
   const logs = generateInitialDailyLogsHistory(students);
   const config = DEFAULT_CONFIG;
   const accounts = [DEFAULT_ADMIN_ACCOUNT];
   const currentUser = DEFAULT_ADMIN_ACCOUNT;
+  const loginEvents: StudentLoginEvent[] = [];
 
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
   localStorage.setItem(STORAGE_KEYS.DAILY_LOGS, JSON.stringify(logs));
   localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(config));
   localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
   localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
+  localStorage.setItem(STORAGE_KEYS.LOGIN_EVENTS, JSON.stringify(loginEvents));
   localStorage.removeItem('classpulse_homework_13_v6');
 
-  return { students, logs, config, accounts, currentUser };
+  return { students, logs, config, accounts, currentUser, loginEvents };
 }
 
 export function exportDailyAttendanceCSV(

@@ -14,6 +14,8 @@ export interface UserAccount {
   displayName: string;
   parentPhone?: string;
   createdAt: string;
+  lastLoginAt?: string;
+  loginCount?: number;
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
@@ -82,6 +84,20 @@ export interface Student {
   payment?: StudentPaymentInfo;
   notesLog: NoteEntry[];
   accountRegistered?: boolean;
+  lastLoginAt?: string;
+  loginCount?: number;
+}
+
+export interface StudentLoginEvent {
+  id: string;
+  studentId: string;
+  rollNumber: number;
+  studentName: string;
+  username: string;
+  phone?: string;
+  action: 'register' | 'login';
+  timestamp: string; // YYYY-MM-DD HH:mm
+  date: string; // YYYY-MM-DD
 }
 
 export interface PeriodInfo {

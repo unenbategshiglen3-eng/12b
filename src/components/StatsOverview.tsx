@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Student, DailyClassLog, ClassroomConfig, UserAccount } from '../types';
-import { Calendar, ChevronLeft, ChevronRight, ShieldCheck, History, BookmarkCheck, CheckCircle2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, ShieldCheck, History, BookmarkCheck, CheckCircle2, UserCheck } from 'lucide-react';
 import { getMongolianWeekday, getTodayDateString, shiftDateString } from '../utils/dateUtils';
 
 interface StatsOverviewProps {
@@ -10,6 +10,7 @@ interface StatsOverviewProps {
   dailyLog: DailyClassLog | undefined;
   isDateSavedInHistory?: boolean;
   savedDaysCount?: number;
+  loggedInStudentsCount?: number;
   config: ClassroomConfig;
   currentUser: UserAccount;
   onNavigateTab: (tab: any) => void;
@@ -24,6 +25,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
   dailyLog,
   isDateSavedInHistory = true,
   savedDaysCount = 0,
+  loggedInStudentsCount = 0,
   config,
   currentUser,
   onNavigateTab,
@@ -203,6 +205,13 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
               )}
             </button>
           )}
+          <button
+            onClick={() => onNavigateTab('logins')}
+            className="px-3 py-1.5 rounded-lg bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-xs transition-colors flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+            Нэвтэрсэн ({loggedInStudentsCount}/{totalStudents})
+          </button>
           <button
             onClick={() => onNavigateTab('history')}
             className="px-3 py-1.5 rounded-lg bg-white hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold text-xs transition-colors flex items-center gap-1.5 whitespace-nowrap"

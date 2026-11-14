@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Student } from '../types';
-import { Search, Plus, Phone } from 'lucide-react';
+import { Search, Plus, Phone, CheckCircle2, UserX } from 'lucide-react';
 
 interface StudentDirectoryProps {
   students: Student[];
@@ -153,16 +153,38 @@ export const StudentDirectory: React.FC<StudentDirectoryProps> = ({
 
                       {/* Student Name */}
                       <td className="py-3 px-3">
-                        <button
-                          onClick={() => onSelectStudent(stu)}
-                          className="font-bold text-slate-900 hover:text-blue-600 transition-colors text-left text-sm"
-                        >
-                          {stu.lastName} {stu.firstName}
-                        </button>
-                        <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            onClick={() => onSelectStudent(stu)}
+                            className="font-bold text-slate-900 hover:text-blue-600 transition-colors text-left text-sm"
+                          >
+                            {stu.lastName} {stu.firstName}
+                          </button>
+                          {stu.accountRegistered || stu.lastLoginAt ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold"
+                              title={stu.lastLoginAt ? `Сүүлд нэвтэрсэн: ${stu.lastLoginAt}` : 'Системд бүртгүүлж нэвтэрсэн'}
+                            >
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                              <span>Нэвтэрсэн</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-medium">
+                              <UserX className="w-2.5 h-2.5" />
+                              <span>Ороогүй</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono flex flex-wrap items-center gap-1.5 mt-0.5">
                           <span>{stu.id}</span>
                           <span aria-hidden="true">·</span>
                           <span>Төрсөн: {stu.dateOfBirth}</span>
+                          {stu.lastLoginAt && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="text-emerald-700 font-semibold">Орсон: {stu.lastLoginAt}</span>
+                            </>
+                          )}
                         </div>
                       </td>
 

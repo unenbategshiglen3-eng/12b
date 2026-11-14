@@ -335,12 +335,20 @@ export const AttendanceMatrix: React.FC<AttendanceMatrixProps> = ({
                     {/* Student Name */}
                     <td className="py-2.5 px-3 border-r border-slate-200/60 sticky left-12 bg-white z-10">
                       <div className="flex items-center justify-between gap-2">
-                        <button
-                          onClick={() => onSelectStudent(stu)}
-                          className="font-bold text-slate-900 hover:text-blue-600 text-left truncate transition-colors"
-                        >
-                          {stu.lastName} {stu.firstName}
-                        </button>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {(stu.accountRegistered || stu.lastLoginAt) && (
+                            <span
+                              className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"
+                              title={stu.lastLoginAt ? `Системд нэвтэрсэн: ${stu.lastLoginAt}` : 'Системд нэвтэрсэн'}
+                            />
+                          )}
+                          <button
+                            onClick={() => onSelectStudent(stu)}
+                            className="font-bold text-slate-900 hover:text-blue-600 text-left truncate transition-colors"
+                          >
+                            {stu.lastName} {stu.firstName}
+                          </button>
+                        </div>
                         <span className="font-mono text-[10px] text-slate-400 tabular-nums shrink-0">
                           {stu.id}
                         </span>

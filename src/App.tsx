@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Student,
   DailyClassLog,
@@ -9,6 +9,7 @@ import {
   PeriodInfo,
   AttendanceStatus,
   UniformStatus,
+  StudentLoginEvent,
 } from './types';
 import {
   loadStoredStudents,
@@ -21,6 +22,8 @@ import {
   saveStoredAccounts,
   loadStoredCurrentUser,
   saveStoredCurrentUser,
+  loadStoredLoginEvents,
+  saveStoredLoginEvents,
   resetAllDataToDefault,
 } from './utils/storage';
 import { getTodayDateString, getCurrentTimeString, getMongolianWeekday } from './utils/dateUtils';
@@ -31,6 +34,7 @@ import { DailyHistoryView } from './components/DailyHistoryView';
 import { WeeklyScheduleView } from './components/WeeklyScheduleView';
 import { UniformTracker } from './components/UniformTracker';
 import { StudentDirectory } from './components/StudentDirectory';
+import { StudentLoginsView } from './components/StudentLoginsView';
 import { DailyReportPrintView } from './components/DailyReportPrintView';
 import { StudentDetailModal } from './components/StudentDetailModal';
 import { AddStudentModal } from './components/AddStudentModal';
@@ -51,8 +55,11 @@ export default function App() {
   const [config, setConfig] = useState<ClassroomConfig>(() => loadStoredConfig());
   const [accounts, setAccounts] = useState<UserAccount[]>(() => loadStoredAccounts());
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => loadStoredCurrentUser());
+  const [loginEvents, setLoginEvents] = useState<StudentLoginEvent[]>(() => loadStoredLoginEvents());
+  const [isSyncingLogins, setIsSyncingLogins] = useState(false);
   const [currentDate, setCurrentDate] = useState<string>(() => getTodayDateString());
   const [activeTab, setActiveTab] = useState<AppTab>('attendance');
+  const recentRegisterRef = useRef<{ studentId: string; atMs: number } | null>(null);
 
   // Modals state
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -85,7 +92,86 @@ export default function App() {
     saveStoredCurrentUser(currentUser);
   }, [currentUser]);
 
+  useEffect(() => {
+    saveStoredLoginEvents(loginEvents);
+  }, [loginEvents]);
+
   const isAdmin = currentUser?.role === 'admin';
+
+  // Fetch cross-device student login events from server (silent offline fallback)
+  const syncStudentLoginsFromServer = useCallback(async () => {
+    setIsSyncingLogins(true);
+    try {
+      const res = await fetch('/api/student-logins', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        events?: StudentLoginEvent[];
+        registeredPhones?: Record<string, string>;
+      };
+
+      const serverEvents = Array.isArray(data.events) ? data.events : [];
+      const registeredPhones =
+        data.registeredPhones && typeof data.registeredPhones === 'object'
+          ? data.registeredPhones
+          : {};
+
+      if (serverEvents.length > 0) {
+        setLoginEvents((prev) => {
+          const byId = new Map<string, StudentLoginEvent>();
+          prev.forEach((ev) => byId.set(ev.id, ev));
+          serverEvents.forEach((ev) => byId.set(ev.id, ev));
+          return Array.from(byId.values())
+            .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+            .slice(0, 500);
+        });
+      }
+
+      if (serverEvents.length > 0 || Object.keys(registeredPhones).length > 0) {
+        setStudents((prevStudents) =>
+          prevStudents.map((stu) => {
+            const stuEvents = serverEvents
+              .filter((ev) => ev.studentId === stu.id || ev.rollNumber === stu.rollNumber)
+              .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+            const latestServerEv = stuEvents[0];
+            const serverPhone = registeredPhones[stu.id] || latestServerEv?.phone;
+
+            if (!latestServerEv && !serverPhone) return stu;
+
+            const latestTimestamp =
+              latestServerEv && (!stu.lastLoginAt || latestServerEv.timestamp > stu.lastLoginAt)
+                ? latestServerEv.timestamp
+                : stu.lastLoginAt;
+
+            return {
+              ...stu,
+              accountRegistered: true,
+              lastLoginAt: latestTimestamp,
+              loginCount: Math.max(stu.loginCount || 0, stuEvents.length),
+              phone: stu.phone || serverPhone || stu.phone,
+              fatherPhone: stu.fatherPhone || serverPhone || stu.fatherPhone,
+              guardianPhone: stu.guardianPhone || serverPhone || stu.guardianPhone,
+            };
+          })
+        );
+      }
+    } catch {
+      // Offline or server unavailable; localStorage remains source of truth
+    } finally {
+      setIsSyncingLogins(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncStudentLoginsFromServer();
+  }, [syncStudentLoginsFromServer]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const interval = setInterval(() => {
+      syncStudentLoginsFromServer();
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [isAdmin, syncStudentLoginsFromServer]);
 
   // Derive periods for any date from the saved 5-day weekly timetable (fallback to config.periods)
   const getPeriodsForDate = (dateStr: string, cfg: ClassroomConfig): PeriodInfo[] => {
@@ -113,34 +199,128 @@ export default function App() {
 
   const savedDaysCount = Object.keys(dailyLogs).length;
 
-  // Authentication handlers
-  const handleLogin = (account: UserAccount) => {
-    setCurrentUser(account);
-    saveStoredCurrentUser(account);
-  };
+  const loggedInStudentsCount = useMemo(() => {
+    return students.filter(
+      (stu) =>
+        stu.accountRegistered ||
+        Boolean(stu.lastLoginAt) ||
+        accounts.some(
+          (a) => a.role === 'student' && (a.studentId === stu.id || a.rollNumber === stu.rollNumber)
+        ) ||
+        loginEvents.some((ev) => ev.studentId === stu.id || ev.rollNumber === stu.rollNumber)
+    ).length;
+  }, [students, accounts, loginEvents]);
 
-  const handleRegisterStudent = (newAccount: UserAccount, parentPhone?: string) => {
-    const updated = [...accounts.filter((a) => a.id !== newAccount.id), newAccount];
-    setAccounts(updated);
-    saveStoredAccounts(updated);
+  // Record student login/register locally and push to shared server log
+  const recordStudentLoginEvent = useCallback(
+    (account: UserAccount, action: 'register' | 'login', phone?: string): UserAccount => {
+      if (account.role !== 'student') return account;
 
-    // Update student parent phone and mark registered
-    if (newAccount.rollNumber) {
+      const matchedStudent = students.find(
+        (s) => s.id === account.studentId || (account.rollNumber && s.rollNumber === account.rollNumber)
+      );
+      const studentId = matchedStudent?.id || account.studentId || `STU-${account.rollNumber || 0}`;
+
+      // Avoid double-counting when signup immediately triggers onLogin after ~700ms
+      if (
+        action === 'login' &&
+        recentRegisterRef.current &&
+        recentRegisterRef.current.studentId === studentId &&
+        Date.now() - recentRegisterRef.current.atMs < 5000
+      ) {
+        recentRegisterRef.current = null;
+        return account;
+      }
+
+      if (action === 'register') {
+        recentRegisterRef.current = { studentId, atMs: Date.now() };
+      }
+
+      const todayStr = getTodayDateString();
+      const timestamp = `${todayStr} ${getCurrentTimeString()}`;
+      const resolvedPhone =
+        phone || account.parentPhone || matchedStudent?.phone || matchedStudent?.fatherPhone || undefined;
+
+      const event: StudentLoginEvent = {
+        id: `ev-${studentId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        studentId,
+        rollNumber: matchedStudent?.rollNumber || account.rollNumber || 0,
+        studentName: matchedStudent
+          ? `${matchedStudent.lastName} ${matchedStudent.firstName}`
+          : account.displayName,
+        username: account.username,
+        phone: resolvedPhone,
+        action,
+        timestamp,
+        date: todayStr,
+      };
+
+      setLoginEvents((prev) => {
+        const next = [event, ...prev].slice(0, 500);
+        saveStoredLoginEvents(next);
+        return next;
+      });
+
+      const updatedAccount: UserAccount = {
+        ...account,
+        lastLoginAt: timestamp,
+        loginCount: (account.loginCount || 0) + 1,
+      };
+
+      setAccounts((prev) => {
+        const hasExisting = prev.some((a) => a.id === account.id);
+        const next = hasExisting
+          ? prev.map((a) => (a.id === account.id ? updatedAccount : a))
+          : [...prev, updatedAccount];
+        saveStoredAccounts(next);
+        return next;
+      });
+
       setStudents((prev) =>
         prev.map((s) => {
-          if (s.rollNumber === newAccount.rollNumber) {
+          if (s.id === studentId || (account.rollNumber && s.rollNumber === account.rollNumber)) {
             return {
               ...s,
               accountRegistered: true,
-              phone: parentPhone || s.phone,
-              fatherPhone: parentPhone || s.fatherPhone,
-              guardianPhone: parentPhone || s.guardianPhone,
+              lastLoginAt: timestamp,
+              loginCount: (s.loginCount || 0) + 1,
+              phone: resolvedPhone || s.phone,
+              fatherPhone: resolvedPhone || s.fatherPhone,
+              guardianPhone: resolvedPhone || s.guardianPhone,
             };
           }
           return s;
         })
       );
-    }
+
+      fetch('/api/student-logins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(event),
+      }).catch(() => {
+        // Offline fallback: already persisted in localStorage
+      });
+
+      return updatedAccount;
+    },
+    [students]
+  );
+
+  // Authentication handlers
+  const handleLogin = (account: UserAccount) => {
+    const trackedAccount =
+      account.role === 'student'
+        ? recordStudentLoginEvent(account, 'login', account.parentPhone)
+        : account;
+    setCurrentUser(trackedAccount);
+    saveStoredCurrentUser(trackedAccount);
+  };
+
+  const handleRegisterStudent = (newAccount: UserAccount, parentPhone?: string) => {
+    const trackedAccount = recordStudentLoginEvent(newAccount, 'register', parentPhone);
+    const updated = [...accounts.filter((a) => a.id !== trackedAccount.id), trackedAccount];
+    setAccounts(updated);
+    saveStoredAccounts(updated);
   };
 
   const handleLogout = () => {
@@ -571,13 +751,22 @@ export default function App() {
   };
 
   const handleResetData = () => {
-    const { students: resetStudents, logs: resetLogs, config: resetConfig, accounts: resetAccounts, currentUser: resetUser } = resetAllDataToDefault();
+    const {
+      students: resetStudents,
+      logs: resetLogs,
+      config: resetConfig,
+      accounts: resetAccounts,
+      currentUser: resetUser,
+      loginEvents: resetLoginEvents,
+    } = resetAllDataToDefault();
     setStudents(resetStudents);
     setDailyLogs(resetLogs);
     setConfig(resetConfig);
     setAccounts(resetAccounts);
     setCurrentUser(resetUser);
+    setLoginEvents(resetLoginEvents);
     setSelectedStudent(null);
+    fetch('/api/student-logins', { method: 'DELETE' }).catch(() => {});
   };
 
   const buildBackupJson = () =>
@@ -587,6 +776,7 @@ export default function App() {
         config,
         students,
         dailyLogs,
+        loginEvents,
       },
       null,
       2
@@ -632,6 +822,7 @@ export default function App() {
         currentUser={currentUser}
         studentsCount={students.length}
         savedDaysCount={savedDaysCount}
+        loggedInStudentsCount={loggedInStudentsCount}
         isAppInstalled={pwaInstall.isInstalled}
         isAppInstallable={pwaInstall.isInstallable}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
@@ -659,7 +850,7 @@ export default function App() {
           /* Administrator View */
           <>
             {/* KPI Summary Strip & Date Selector */}
-            {activeTab !== 'reports' && activeTab !== 'schedule' && activeTab !== 'history' && (
+            {activeTab !== 'reports' && activeTab !== 'schedule' && activeTab !== 'history' && activeTab !== 'logins' && (
               <StatsOverview
                 currentDate={currentDate}
                 setCurrentDate={setCurrentDate}
@@ -667,6 +858,7 @@ export default function App() {
                 dailyLog={currentDailyLog}
                 isDateSavedInHistory={Boolean(dailyLogs[currentDate])}
                 savedDaysCount={savedDaysCount}
+                loggedInStudentsCount={loggedInStudentsCount}
                 config={config}
                 currentUser={currentUser}
                 onNavigateTab={setActiveTab}
@@ -757,6 +949,22 @@ export default function App() {
                   setSelectedStudent(stu);
                 }}
                 onOpenAddStudent={() => setIsAddStudentOpen(true)}
+              />
+            )}
+
+            {/* Tab 5B: Student Logins & Registration Tracker */}
+            {activeTab === 'logins' && (
+              <StudentLoginsView
+                students={students}
+                accounts={accounts}
+                loginEvents={loginEvents}
+                config={config}
+                isSyncing={isSyncingLogins}
+                onRefreshLogins={syncStudentLoginsFromServer}
+                onSelectStudent={(stu) => {
+                  setDetailModalDate(null);
+                  setSelectedStudent(stu);
+                }}
               />
             )}
 
